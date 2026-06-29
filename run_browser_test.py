@@ -221,6 +221,13 @@ SERVICE_HANDLERS = {
 }
 
 
+# 回答语言配置
+LANG_PROMPTS = {
+    "zh": "请用中文回答以下问题：\n\n",
+    "en": "Please answer the following question in English:\n\n",
+    "auto": "",
+}
+
 # ============================================================================
 # 浏览器自动化核心
 # ============================================================================
@@ -412,12 +419,15 @@ def send_question(page, handler, question_text, timeout=120000):
 
 def run_browser_test(services: list[str], questions: list[dict],
                      output_path: str, headless: bool = False,
-                     user_data_dir: str = None, question_delay: float = 3.0):
+                     user_data_dir: str = None, question_delay: float = 3.0,
+                     answer_lang: str = "zh"):
     """主测试流程：对每个服务、每个问题执行网页自动化测试。"""
     sync_playwright = ensure_playwright()
 
     if user_data_dir is None:
         user_data_dir = str(Path.home() / ".claude" / "skills" / "model-tester" / "browser-data")
+
+    lang_prompt = LANG_PROMPTS.get(answer_lang, "")
 
     all_results = []
 
@@ -474,7 +484,7 @@ def run_browser_test(services: list[str], questions: list[dict],
             # 逐题测试
             for qi, q in enumerate(questions):
                 q_num = q["question_num"]
-                q_text = q["question_text"]
+                q_text = lang_prompt + q["question_text"] if lang_prompt else q["question_text"]
                 now = datetime.now()
                 test_date = f"{now.year}/{now.month}/{now.day}"
                 test_time = now.strftime("%H:%M")
@@ -720,6 +730,8 @@ def main():
                         help="题间延迟秒数（默认 3.0）")
     parser.add_argument("--headless", action="store_true",
                         help="无头模式（不显示浏览器窗口，需已登录）")
+    parser.add_argument("--answer-lang", "-l", default="zh",
+                        help="要求模型回答的语言（默认: zh）。可选: zh/en/auto")
     parser.add_argument("--user-data-dir",
                         help="浏览器用户数据目录（默认 ~/.claude/skills/model-tester/browser-data）")
     parser.add_argument("--list-services", action="store_true",
@@ -745,6 +757,12 @@ def main():
             print(f"❌ 未知服务: {', '.join(invalid)}")
             print(f"   可用: {', '.join(SERVICE_HANDLERS.keys())}")
             sys.exit(1)
+
+    # 校验回答语言
+    if args.answer_lang not in LANG_PROMPTS:
+        print(f"❌ 未知语言: {args.answer_lang}")
+        print(f"   可选: {', '.join(LANG_PROMPTS.keys())}")
+        sys.exit(1)
 
     # 输入文件
     input_path = Path(args.input)
@@ -788,6 +806,7 @@ def main():
         headless=args.headless,
         user_data_dir=args.user_data_dir,
         question_delay=args.delay,
+        answer_lang=args.answer_lang,
     )
 
     # 总结

@@ -209,6 +209,15 @@ DEFAULT_MODELS = [
     "gemini-2.5-flash",
 ]
 
+# 回答语言配置
+LANG_PROMPTS = {
+    "zh": "请用中文回答以下问题：\n\n",
+    "en": "Please answer the following question in English:\n\n",
+    "auto": "",  # 不附加指令，模型自行判断
+}
+
+DEFAULT_ANSWER_LANG = "zh"
+
 
 # ============================================================================
 # DOCX 解析（与原版一致）
@@ -532,6 +541,8 @@ def main():
     parser.add_argument("--list-models", action="store_true", help="列出所有可用模型并退出")
     parser.add_argument("--max-tokens", type=int, default=4096, help="最大输出 token 数（默认 4096）")
     parser.add_argument("--timeout", type=int, default=120, help="单次请求超时秒数（默认 120）")
+    parser.add_argument("--answer-lang", "-l", default=DEFAULT_ANSWER_LANG,
+                        help=f"要求模型回答的语言（默认: {DEFAULT_ANSWER_LANG}）。可选: zh/en/auto")
     parser.add_argument("--key", "-k", action="append", default=None,
                         help="API key，格式: 厂商:密钥。可多次指定。\n"
                              "例如: --key openai:sk-xxx --key anthropic:sk-ant-xxx\n"
@@ -579,6 +590,12 @@ def main():
     if invalid:
         print(f"❌ 未知模型: {', '.join(invalid)}")
         print(f"   使用 --list-models 查看完整列表")
+        sys.exit(1)
+
+    # 校验回答语言
+    if args.answer_lang not in LANG_PROMPTS:
+        print(f"❌ 未知语言: {args.answer_lang}")
+        print(f"   可选: {', '.join(LANG_PROMPTS.keys())}")
         sys.exit(1)
 
     # --- 收集所需 API keys ---
@@ -648,14 +665,23 @@ def main():
     if not questions:
         print("❌ 未解析到任何题目"); sys.exit(1)
 
+    # 回答语言指令
+    lang_prompt = LANG_PROMPTS.get(args.answer_lang, LANG_PROMPTS[DEFAULT_ANSWER_LANG])
+
     # 2. 测试
     total_tasks = len(questions) * len(model_names)
-    print(f"\n🚀 开始测试，共 {total_tasks} 个任务（{len(questions)} 题 × {len(model_names)} 个模型）\n")
+    print(f"\n🚀 开始测试，共 {total_tasks} 个任务（{len(questions)} 题 × {len(model_names)} 个模型）")
+    if lang_prompt:
+        print(f"   回答语言要求: {args.answer_lang}（将在每道题目前附加语言指令）")
+    print()
 
     all_results = []
     task_count = 0
 
     for q in questions:
+        # 构建完整提示：语言指令 + 原问题
+        full_question = lang_prompt + q["question_text"] if lang_prompt else q["question_text"]
+
         for mn in model_names:
             task_count += 1
             pkey, model_id = MODEL_LOOKUP[mn]
@@ -667,7 +693,7 @@ def main():
             print(f"[{task_count}/{total_tasks}] 📝 [{mn}] {q['question_num']} {q_preview}...",
                   end=" ", flush=True)
 
-            result = call_model(pkey, model_id, q["question_text"], api_keys,
+            result = call_model(pkey, model_id, full_question, api_keys,
                                max_tokens=args.max_tokens, timeout=args.timeout)
 
             status = "✅" if result["success"] else "❌"
