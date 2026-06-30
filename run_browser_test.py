@@ -663,7 +663,11 @@ def save_to_excel(results: list[dict], output_path: str):
 # ============================================================================
 
 def parse_docx(filepath: str) -> list[dict]:
-    """解析 .docx 文件，提取题目及分类层级。"""
+    """解析 .docx 文件，提取题目及分类层级。
+    支持两种格式：
+    - 紧凑格式：题号+题目在同一段（如 "1.1 问题文本"）
+    - 拆分格式：题号单独一段，题目正文在下一段（如藏语 docx）
+    """
     from zipfile import ZipFile
     from xml.etree import ElementTree
 
@@ -684,18 +688,59 @@ def parse_docx(filepath: str) -> list[dict]:
 
     questions = []
     current_category = ""
+    pending_question = None  # 拆分格式：上一行是独立题号
+
     for line in paragraphs:
-        has_sub_number = bool(re.match(r'^\d+\.\d+', line))
-        if has_sub_number:
-            match = re.match(r'^(\d+\.\d+)\s*(.*)', line, re.DOTALL)
-            if match:
-                questions.append({
-                    "category": current_category,
-                    "question_num": match.group(1),
-                    "question_text": match.group(2).strip(),
-                })
-        else:
+        # 独立的题号（如 "1.1" 独占一行），后面段落是题目正文
+        if re.match(r'^\d+\.\d+\s*$', line):
+            if pending_question:
+                questions.append(pending_question)
+            pending_question = {
+                "category": current_category,
+                "question_num": line.strip(),
+                "question_text": "",
+            }
+            continue
+
+        # 题号+题目在同一行（如 "1.1 问题文本"）
+        m = re.match(r'^(\d+\.\d+)\s+(.+)', line)
+        if m:
+            if pending_question:
+                questions.append(pending_question)
+                pending_question = None
+            questions.append({
+                "category": current_category,
+                "question_num": m.group(1),
+                "question_text": m.group(2).strip(),
+            })
+            continue
+
+        # 大类标题（如 "1. 标题文本"）
+        sec = re.match(r'^(\d+)\.\s+(.+)', line)
+        if sec:
+            if pending_question:
+                questions.append(pending_question)
+                pending_question = None
             current_category = line
+            continue
+
+        # 独立大类编号（如 "1." 独占一行），后面是标题
+        if re.match(r'^\d+\.\s*$', line):
+            if pending_question:
+                questions.append(pending_question)
+                pending_question = None
+            continue
+
+        # 有 pending question，当前行就是题目正文
+        if pending_question:
+            pending_question["question_text"] = line
+            questions.append(pending_question)
+            pending_question = None
+            continue
+
+    if pending_question:
+        questions.append(pending_question)
+
     return questions
 
 
