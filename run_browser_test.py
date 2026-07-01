@@ -432,41 +432,70 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     screenshot_path = None
     if screenshot_dir and response_text and response_text != "[未能提取回答]":
         try:
-            # 先滚动到底部确保所有内容渲染
-            page.evaluate("window.scrollTo(0, 0)")
-            time.sleep(0.5)
+            # 滚动到底触发懒加载
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(1)
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
+            # 计算完整内容高度
+            content_height = page.evaluate("""
+                Math.max(
+                    document.body.scrollHeight,
+                    document.documentElement.scrollHeight,
+                    document.body.offsetHeight,
+                    document.documentElement.offsetHeight
+                )
+            """)
+
+            # 给最后一个回答加红框
+            resp_sels = handler.get("response_selector", "")
+            if isinstance(resp_sels, str):
+                resp_sels = [resp_sels]
+            if handler.get("response_fallback"):
+                fb = handler["response_fallback"]
+                resp_sels.extend([fb] if isinstance(fb, str) else fb)
+
+            for sel in resp_sels:
+                try:
+                    page.evaluate(f"""
+                        const els = document.querySelectorAll('{sel}');
+                        if (els.length > 0) {{
+                            const last = els[els.length - 1];
+                            last.style.setProperty('border', '4px solid red', 'important');
+                            last.style.setProperty('padding', '8px', 'important');
+                            last.scrollIntoView({{block: 'center'}});
+                        }}
+                    """)
+                    break  # 成功标记就跳出
+                except Exception:
+                    continue
+
             time.sleep(0.5)
 
-            # 只给最后一个回答区域加红框
-            resp_sel = handler.get("response_selector", "")
-            if resp_sel:
-                page.evaluate(f"""
-                    const els = document.querySelectorAll('{resp_sel}');
-                    if (els.length > 0) {{
-                        const last = els[els.length - 1];
-                        last.style.outline = '3px solid red';
-                        last.style.outlineOffset = '3px';
-                    }}
-                """)
-                time.sleep(0.3)
+            # 调大视口高度截图（绕过滚动子容器限制）
+            orig_size = page.viewport_size
+            capture_height = max(content_height + 100, orig_size.get("height", 900))
+            page.set_viewport_size({"width": orig_size.get("width", 1280), "height": capture_height})
+            time.sleep(0.5)
 
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
-            page.screenshot(path=screenshot_path, full_page=True)
+            page.screenshot(path=screenshot_path)  # 视口截图 = 完整内容
 
-            # 去掉红框
-            if resp_sel:
-                page.evaluate(f"""
-                    const els = document.querySelectorAll('{resp_sel}');
-                    if (els.length > 0) {{
-                        els[els.length - 1].style.outline = '';
-                        els[els.length - 1].style.outlineOffset = '';
-                    }}
-                """)
+            # 恢复视口，清除红框
+            page.set_viewport_size(orig_size)
+            for sel in resp_sels:
+                try:
+                    page.evaluate(f"""
+                        const els = document.querySelectorAll('{sel}');
+                        if (els.length > 0) {{
+                            const last = els[els.length - 1];
+                            last.style.border = '';
+                            last.style.padding = '';
+                        }}
+                    """)
+                except Exception:
+                    pass
         except Exception as e:
             screenshot_path = f"截图失败: {e}"
 
