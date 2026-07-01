@@ -428,81 +428,51 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     # 5. 提取回答
     response_text = extract_response(page, handler)
 
-    # 6. 截取完整网页（含问题和回答，绕过固定高度容器限制）
+    # 6. 截取当前可见的问答区域，红框标出回答
     screenshot_path = None
     if screenshot_dir and response_text and response_text != "[未能提取回答]":
         try:
-            # 注入 CSS 强制展开所有内容（绕过固定高度/overflow hidden 容器）
-            page.evaluate("""
-                const style = document.createElement('style');
-                style.id = '__screenshot_expand__';
-                style.textContent = `
-                    html, body, #root, #__next, [class*="chat"], [class*="conversation"],
-                    [class*="messages"], [class*="scroll"], [class*="main"], [role="list"],
-                    [class*="content"], main, section {
-                        overflow: visible !important;
-                        height: auto !important;
-                        max-height: none !important;
-                        position: static !important;
-                    }
-                `;
-                document.head.appendChild(style);
-            """)
-            time.sleep(0.5)
-
-            # 滚动到顶部再到底部，触发完整渲染
-            page.evaluate("window.scrollTo(0, 0)")
-            time.sleep(0.3)
+            # 滚动页面到问答可见区域
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(1)
-
-            # 给最后一个回答加红框
-            resp_sels = handler.get("response_selector", "")
-            if isinstance(resp_sels, str):
-                resp_sels = [resp_sels]
-            if handler.get("response_fallback"):
-                fb = handler["response_fallback"]
-                resp_sels.extend([fb] if isinstance(fb, str) else fb)
-
-            for sel in resp_sels:
-                try:
-                    page.evaluate(f"""
-                        const els = document.querySelectorAll('{sel}');
-                        if (els.length > 0) {{
-                            const last = els[els.length - 1];
-                            last.style.setProperty('border', '4px solid red', 'important');
-                            last.style.setProperty('padding', '8px', 'important');
-                            last.scrollIntoView({{block: 'center'}});
-                        }}
-                    """)
-                    break
-                except Exception:
-                    continue
             time.sleep(0.5)
+            # 再往回滚一点，确保问题和回答同屏可见
+            page.evaluate("window.scrollBy(0, -400)")
+            time.sleep(0.3)
 
-            # 用 full_page 截图（CSS 已展开所有容器，body 高度现在反映真实内容高度）
+            # 给最近一条可见的大段文本加红框
+            page.evaluate("""
+                const all = document.querySelectorAll('p, div[class*="message"], div[class*="prose"], [class*="response"]');
+                let best = null, bestLen = 0;
+                all.forEach(el => {
+                    const t = el.innerText || '';
+                    if (t.length > bestLen && t.length > 50) { bestLen = t.length; best = el; }
+                });
+                if (best) {
+                    best.style.setProperty('border', '3px solid red', 'important');
+                    best.style.setProperty('border-radius', '4px', 'important');
+                    best.style.setProperty('padding', '6px', 'important');
+                    best.scrollIntoView({block: 'center', behavior: 'instant'});
+                }
+            """)
+            time.sleep(0.4)
+
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
-            page.screenshot(path=screenshot_path, full_page=True)
+            # 视口截图——截取当前可见区域
+            page.screenshot(path=screenshot_path)
 
-            # 恢复：移除注入样式、清除红框
+            # 清除红框
             page.evaluate("""
-                const s = document.getElementById('__screenshot_expand__');
-                if (s) s.remove();
+                const all = document.querySelectorAll('*');
+                all.forEach(el => {
+                    if (el.style.border && el.style.border.includes('red')) {
+                        el.style.border = '';
+                        el.style.borderRadius = '';
+                        el.style.padding = '';
+                    }
+                });
             """)
-            for sel in resp_sels:
-                try:
-                    page.evaluate(f"""
-                        const els = document.querySelectorAll('{sel}');
-                        if (els.length > 0) {{
-                            const last = els[els.length - 1];
-                            last.style.border = '';
-                            last.style.padding = '';
-                        }}
-                    """)
-                except Exception:
-                    pass
         except Exception as e:
             screenshot_path = f"截图失败: {e}"
 
