@@ -545,12 +545,23 @@ def run_browser_test(services: list[str], questions: list[dict],
                 input_exists = find_element(page, handler["input_fallback"], timeout=5000)
 
             if not input_exists:
-                print(f"  ⚠️ 未找到输入框，可能未登录或页面已改版，跳过该服务")
-                # 批处理模式：跳过需要手动干预的服务
-                for q in questions:
-                    all_results.append(_fail_result(q, svc_key, handler,
-                                                    "需手动登录，跳过", doc_lang))
-                continue
+                print(f"  ⏳ 未登录，请在浏览器中登录 {handler['name']}（等待 90 秒）...")
+                for wait_sec in range(90, 0, -5):
+                    time.sleep(5)
+                    input_exists = find_element(page, handler["input_selector"], timeout=3000)
+                    if not input_exists and handler.get("input_fallback"):
+                        input_exists = find_element(page, handler["input_fallback"], timeout=3000)
+                    if input_exists:
+                        print(f"  ✅ 检测到登录成功，继续测试")
+                        break
+                    if wait_sec % 15 == 0:
+                        print(f"  ... 剩余 {wait_sec} 秒等待登录")
+                if not input_exists:
+                    print(f"  ❌ 超时未登录，跳过该服务")
+                    for q in questions:
+                        all_results.append(_fail_result(q, svc_key, handler,
+                                                        "未登录，跳过", doc_lang))
+                    continue
 
             # 逐题测试
             for qi, q in enumerate(questions):
