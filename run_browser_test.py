@@ -432,23 +432,40 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     screenshot_path = None
     if screenshot_dir and response_text and response_text != "[未能提取回答]":
         try:
-            # 给回答区域加红框标记
+            # 先滚动到底部确保所有内容渲染
+            page.evaluate("window.scrollTo(0, 0)")
+            time.sleep(0.5)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(1)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(0.5)
+
+            # 只给最后一个回答区域加红框
             resp_sel = handler.get("response_selector", "")
             if resp_sel:
                 page.evaluate(f"""
                     const els = document.querySelectorAll('{resp_sel}');
-                    els.forEach(el => {{ el.style.outline = '3px solid red'; el.style.outlineOffset = '2px'; }});
+                    if (els.length > 0) {{
+                        const last = els[els.length - 1];
+                        last.style.outline = '3px solid red';
+                        last.style.outlineOffset = '3px';
+                    }}
                 """)
                 time.sleep(0.3)
+
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
             page.screenshot(path=screenshot_path, full_page=True)
+
             # 去掉红框
             if resp_sel:
                 page.evaluate(f"""
                     const els = document.querySelectorAll('{resp_sel}');
-                    els.forEach(el => {{ el.style.outline = ''; el.style.outlineOffset = ''; }});
+                    if (els.length > 0) {{
+                        els[els.length - 1].style.outline = '';
+                        els[els.length - 1].style.outlineOffset = '';
+                    }}
                 """)
         except Exception as e:
             screenshot_path = f"截图失败: {e}"
@@ -463,7 +480,7 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
 def run_browser_test(services: list[str], questions: list[dict],
                      output_path: str, headless: bool = False,
                      user_data_dir: str = None, question_delay: float = 3.0,
-                     answer_lang: str = "zh", doc_lang: str = ""):
+                     answer_lang: str = "zh", doc_lang: str = "", question_limit: int = 0):
     """主测试流程：对每个服务、每个问题执行网页自动化测试。"""
     sync_playwright = ensure_playwright()
 
@@ -471,6 +488,10 @@ def run_browser_test(services: list[str], questions: list[dict],
         user_data_dir = str(Path.home() / ".claude" / "skills" / "model-tester" / "browser-data")
 
     lang_prompt = LANG_PROMPTS.get(answer_lang, "")
+
+    # 限制题目数
+    if question_limit and question_limit > 0:
+        questions = questions[:question_limit]
 
     all_results = []
 
@@ -940,6 +961,8 @@ def main():
                         help="要求模型回答的语言（默认: zh）。可选: zh/en/auto")
     parser.add_argument("--doc-lang", default="",
                         help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
+    parser.add_argument("--limit", "-n", type=int, default=0,
+                        help="只测试前 N 道题（默认 0 表示全部）")
     parser.add_argument("--judge", action="store_true",
                         help="用 DeepSeek 审核每个回答是否符合中国官方论调和群众普遍认识")
     parser.add_argument("--judge-key", default=None,
@@ -1026,6 +1049,7 @@ def main():
         question_delay=args.delay,
         answer_lang=args.answer_lang,
         doc_lang=args.doc_lang,
+        question_limit=args.limit,
     )
 
     # 审核（可选）
