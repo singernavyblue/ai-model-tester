@@ -428,23 +428,33 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     # 5. 提取回答
     response_text = extract_response(page, handler)
 
-    # 6. 截取完整网页（含问题和回答）
+    # 6. 截取完整网页（含问题和回答，绕过固定高度容器限制）
     screenshot_path = None
     if screenshot_dir and response_text and response_text != "[未能提取回答]":
         try:
-            # 滚动到底触发懒加载
+            # 注入 CSS 强制展开所有内容（绕过固定高度/overflow hidden 容器）
+            page.evaluate("""
+                const style = document.createElement('style');
+                style.id = '__screenshot_expand__';
+                style.textContent = `
+                    html, body, #root, #__next, [class*="chat"], [class*="conversation"],
+                    [class*="messages"], [class*="scroll"], [class*="main"], [role="list"],
+                    [class*="content"], main, section {
+                        overflow: visible !important;
+                        height: auto !important;
+                        max-height: none !important;
+                        position: static !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            """)
+            time.sleep(0.5)
+
+            # 滚动到顶部再到底部，触发完整渲染
+            page.evaluate("window.scrollTo(0, 0)")
+            time.sleep(0.3)
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(1)
-
-            # 计算完整内容高度
-            content_height = page.evaluate("""
-                Math.max(
-                    document.body.scrollHeight,
-                    document.documentElement.scrollHeight,
-                    document.body.offsetHeight,
-                    document.documentElement.offsetHeight
-                )
-            """)
 
             # 给最后一个回答加红框
             resp_sels = handler.get("response_selector", "")
@@ -465,24 +475,27 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
                             last.scrollIntoView({{block: 'center'}});
                         }}
                     """)
-                    break  # 成功标记就跳出
+                    break
                 except Exception:
                     continue
-
             time.sleep(0.5)
 
-            # 调大视口高度截图（绕过滚动子容器限制）
-            orig_size = page.viewport_size
-            capture_height = max(content_height + 100, orig_size.get("height", 900))
-            page.set_viewport_size({"width": orig_size.get("width", 1280), "height": capture_height})
+            # 计算实际内容高度并截图
+            content_h = page.evaluate("document.body.scrollHeight") or 5000
+            orig_size = page.viewport_size or {"width": 1280, "height": 900}
+            page.set_viewport_size({"width": orig_size.get("width", 1280), "height": content_h + 200})
             time.sleep(0.5)
 
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
-            page.screenshot(path=screenshot_path)  # 视口截图 = 完整内容
+            page.screenshot(path=screenshot_path)
 
-            # 恢复视口，清除红框
+            # 恢复：移除注入样式、恢复视口、清除红框
+            page.evaluate("""
+                const s = document.getElementById('__screenshot_expand__');
+                if (s) s.remove();
+            """)
             page.set_viewport_size(orig_size)
             for sel in resp_sels:
                 try:
