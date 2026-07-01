@@ -393,23 +393,29 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     except Exception as e:
         return {"success": False, "response": "", "error": f"输入失败: {e}"}
 
-    # 3. 提交
+    # 3. 提交（重试处理元素失联）
     submit_strategy = handler.get("submit_strategy", "enter")
-    if submit_strategy == "click":
-        submit_sel = handler.get("submit_selector", "")
-        if submit_sel:
-            try:
-                btn = find_element(page, submit_sel, timeout=5000)
-                if btn:
-                    btn.click()
+    for retry in range(3):
+        try:
+            if submit_strategy == "click":
+                submit_sel = handler.get("submit_selector", "")
+                if submit_sel:
+                    btn = find_element(page, submit_sel, timeout=5000)
+                    if btn:
+                        btn.click()
+                    else:
+                        input_el.press("Enter")
                 else:
                     input_el.press("Enter")
-            except Exception:
+            else:
                 input_el.press("Enter")
-        else:
-            input_el.press("Enter")
-    else:
-        input_el.press("Enter")
+            break
+        except Exception:
+            if retry < 2:
+                time.sleep(1)
+                input_el = find_element(page, input_selectors, timeout=5000)
+                if not input_el:
+                    raise
 
     time.sleep(2)
 
