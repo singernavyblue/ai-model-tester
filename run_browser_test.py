@@ -262,49 +262,53 @@ def find_element(page, selectors, timeout=5000):
 
 
 def wait_for_response_completion(page, handler, timeout=120000):
-    """等待 AI 回答完成。"""
+    """等待 AI 回答完成。三重检测确保回答完毕后才继续。"""
     strategy = handler.get("wait_done_strategy", "stable_dom")
     start = time.time()
 
+    # 第一重：等停止按钮出现再消失（表示生成完毕）
     if strategy == "stop_button_gone":
-        # 等待"停止生成"按钮消失（表示回答完成）
         stop_sel = handler.get("stop_button_selector", "")
         if stop_sel:
             try:
-                # 先等待停止按钮出现（说明正在生成）
                 page.wait_for_selector(stop_sel, timeout=15000, state="visible")
             except Exception:
-                pass
-            # 再等待它消失
+                pass  # 可能已经生成完了
             try:
                 page.wait_for_selector(stop_sel, timeout=timeout, state="detached")
-                time.sleep(handler.get("post_wait", 1000) / 1000)
-                return True
+                time.sleep(2)  # 按钮消失后多等 2 秒确保最后几个 token 渲染完
             except Exception:
-                # 超时也继续，可能回答已经完成但选择器变了
                 pass
 
-    elif strategy == "stable_dom":
-        # 等待 DOM 稳定（无新内容出现）
-        stable_wait = handler.get("stable_wait", 5000) / 1000
-        time.sleep(stable_wait)
+    # 第二重：等 DOM 稳定（文本不再变化）
+    try:
+        prev_text = ""
+        for _ in range(6):  # 最多检测 6 次，每次间隔 2 秒
+            time.sleep(2)
+            try:
+                body = page.query_selector("body")
+                cur_text = body.inner_text() if body else ""
+            except Exception:
+                cur_text = ""
+            if cur_text == prev_text and len(cur_text) > 100:
+                break  # 文本稳定且足够长，认为生成完毕
+            prev_text = cur_text
+            if time.time() - start > timeout / 1000:
+                break
+    except Exception:
+        pass
 
-        # 再额外等一会儿确保流式输出完成
-        try:
-            # 尝试找"复制"按钮或类似已完成标记
-            page.wait_for_selector(
-                'button[aria-label="Copy"], button[title="Copy"], [data-testid="copy-button"]',
-                timeout=min(timeout - (time.time() - start) * 1000, 30000)
-            )
-            time.sleep(1)
-        except Exception:
-            pass
-        return True
+    # 第三重：等完成标记出现（复制/点赞按钮等）
+    try:
+        page.wait_for_selector(
+            'button[aria-label="Copy"], [data-testid="copy"], [aria-label="Like"], '
+            '[aria-label="Good response"], [aria-label="Thumbs up"]',
+            timeout=min(15000, timeout - (time.time() - start) * 1000)
+        )
+        time.sleep(handler.get("post_wait", 2000) / 1000)
+    except Exception:
+        time.sleep(handler.get("stable_wait", 8000) / 1000)
 
-    # 默认：等待足够时间
-    remaining = timeout / 1000 - (time.time() - start)
-    if remaining > 0:
-        time.sleep(min(remaining, handler.get("stable_wait", 5000) / 1000))
     return True
 
 
