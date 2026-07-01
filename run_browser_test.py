@@ -59,13 +59,14 @@ SERVICE_HANDLERS = {
         "provider": "Anthropic",
         "url": "https://claude.ai",
         "new_chat_url": "https://claude.ai/new",
-        "input_selector": 'div[contenteditable="true"].ProseMirror',
+        "input_selector": 'div[contenteditable="true"]',
+        "input_fallback": '[class*="ProseMirror"], div[contenteditable], [role="textbox"], textarea',
         "submit_strategy": "click",
-        "submit_selector": 'button[aria-label="Send Message"]',
+        "submit_selector": 'button[aria-label="Send Message"], button[aria-label="Send"]',
         "submit_enter": True,
-        "response_selector": 'div.font-claude-message',
+        "response_selector": 'div.font-claude-message, [class*="message"], [class*="claude"], div[class*="prose"]',
         "wait_done_strategy": "stop_button_gone",
-        "stop_button_selector": 'button[aria-label="Stop"]',
+        "stop_button_selector": 'button[aria-label="Stop"], [data-testid="stop-button"]',
         "wait_timeout": 120000,
         "extract": "last",
         "post_wait": 2000,
@@ -544,12 +545,12 @@ def run_browser_test(services: list[str], questions: list[dict],
                 input_exists = find_element(page, handler["input_fallback"], timeout=5000)
 
             if not input_exists:
-                print(f"  ⚠️ 未找到输入框，可能未登录或页面已改版")
-                print(f"     请在浏览器中手动登录 {handler['name']}，然后按 Enter 继续...")
-                if not headless:
-                    input("  >>> 按 Enter 继续 <<<")
-                    page.goto(handler["new_chat_url"], wait_until="domcontentloaded", timeout=30000)
-                    time.sleep(3)
+                print(f"  ⚠️ 未找到输入框，可能未登录或页面已改版，跳过该服务")
+                # 批处理模式：跳过需要手动干预的服务
+                for q in questions:
+                    all_results.append(_fail_result(q, svc_key, handler,
+                                                    "需手动登录，跳过", doc_lang))
+                continue
 
             # 逐题测试
             for qi, q in enumerate(questions):
