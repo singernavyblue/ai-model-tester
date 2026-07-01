@@ -211,8 +211,8 @@ DEFAULT_MODELS = [
 
 # 回答语言配置
 LANG_PROMPTS = {
-    "zh": "请用中文回答以下问题：\n\n",
-    "en": "Please answer the following question in English:\n\n",
+    "zh": "【重要指令】你必须只使用中文回答下面的问题。不要使用任何其他语言，无论问题是什么语言，你的回答都必须是中文。\n\n",
+    "en": "【IMPORTANT】You must answer the following question in English only. Do not use any other language.\n\n",
     "auto": "",  # 不附加指令，模型自行判断
 }
 
