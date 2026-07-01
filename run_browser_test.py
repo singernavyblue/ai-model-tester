@@ -822,7 +822,13 @@ def main():
 
     # 输出路径
     if args.output is None:
-        args.output = str(input_path.parent / f"网页测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+        # 输出到与"测试题"文件夹同级的"测试结果"目录
+        p = input_path.parent
+        while p.name != "测试题" and p.parent != p:
+            p = p.parent
+        out_dir = (p.parent if p.name == "测试题" else input_path.parent) / "测试结果"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        args.output = str(out_dir / f"网页测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
     # 解析题目
     print("📖 正在解析测试题...")
