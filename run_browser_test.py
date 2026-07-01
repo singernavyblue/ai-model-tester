@@ -213,10 +213,11 @@ SERVICE_HANDLERS = {
         "submit_enter": True,
         "response_selector": 'div[class*="message"], div[class*="response"], div[class*="prose"]',
         "wait_done_strategy": "stable_dom",
-        "wait_timeout": 120000,
-        "stable_wait": 5000,
-        "extract": "last",
-        "post_wait": 2000,
+        "wait_timeout": 180000,
+        "stable_wait": 12000,
+        "extract": "full_page",
+        "post_wait": 5000,
+        "scroll_to_bottom": True,
     },
 }
 
@@ -307,7 +308,7 @@ def wait_for_response_completion(page, handler, timeout=120000):
 
 
 def extract_response(page, handler):
-    """提取当前页面中的最后一个 AI 回答。"""
+    """提取当前页面中的 AI 回答。"""
     extract_mode = handler.get("extract", "last")
     selectors = handler.get("response_selector", "")
     fallback = handler.get("response_fallback", "")
@@ -315,13 +316,24 @@ def extract_response(page, handler):
     if fallback:
         all_selectors.extend([fallback] if isinstance(fallback, str) else fallback)
 
+    # 滚动到底部，确保懒加载内容全部出现
+    if handler.get("scroll_to_bottom"):
+        try:
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(1)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(0.5)
+        except Exception:
+            pass
+
     texts = []
     for sel in all_selectors:
         try:
             els = page.query_selector_all(sel)
             for el in els:
-                t = el.inner_text().strip()
-                if t and len(t) > 5:  # 过滤太短的空消息
+                # 用 text_content 获取全部文本（比 inner_text 更完整）
+                t = el.text_content().strip()
+                if t and len(t) > 5:
                     texts.append(t)
             if texts:
                 break
@@ -329,7 +341,7 @@ def extract_response(page, handler):
             continue
 
     if not texts:
-        # 最终兜底：获取页面主体文本
+        # 兜底：获取页面主体文本
         try:
             body = page.query_selector("body")
             if body:
@@ -340,10 +352,10 @@ def extract_response(page, handler):
 
     if extract_mode == "last":
         return texts[-1]
-    elif extract_mode == "all_after_last_prompt":
-        return "\n\n".join(texts) if len(texts) > 1 else texts[-1]
-    else:
+    elif extract_mode == "full_page":
         return "\n\n".join(texts)
+    else:
+        return "\n\n".join(texts) if len(texts) > 1 else texts[-1]
 
 
 def send_question(page, handler, question_text, timeout=120000):
@@ -695,7 +707,7 @@ def parse_docx(filepath: str) -> list[dict]:
 
     for line in paragraphs:
         # 独立的题号（如 "1.1" 独占一行），后面段落是题目正文
-        if re.match(r'^\d+\.\d+\s*$', line):
+        if re.match(r'^\d+\.\d+\.?\s*$', line):
             if pending_question:
                 questions.append(pending_question)
             pending_question = {
@@ -705,8 +717,8 @@ def parse_docx(filepath: str) -> list[dict]:
             }
             continue
 
-        # 题号+题目在同一行（如 "1.1 问题文本"）
-        m = re.match(r'^(\d+\.\d+)\s+(.+)', line)
+        # 题号+题目在同一行（如 "1.1 问题文本" 或 "1.1问题文本" 无空格）
+        m = re.match(r'^(\d+\.\d+)\.?\s*(.+)', line)
         if m:
             if pending_question:
                 questions.append(pending_question)
@@ -718,8 +730,8 @@ def parse_docx(filepath: str) -> list[dict]:
             })
             continue
 
-        # 大类标题（如 "1. 标题文本"）
-        sec = re.match(r'^(\d+)\.\s+(.+)', line)
+        # 大类标题（如 "1. 标题文本" 或 "1.标题文本" 无空格）
+        sec = re.match(r'^(\d+)\.\s*(.+)', line)
         if sec:
             if pending_question:
                 questions.append(pending_question)

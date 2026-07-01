@@ -250,7 +250,7 @@ def parse_docx(filepath: str) -> list[dict]:
 
     for line in paragraphs:
         # 独立的题号（如 "1.1" 独占一行），后面段落是题目正文
-        if re.match(r'^\d+\.\d+\s*$', line):
+        if re.match(r'^\d+\.\d+\.?\s*$', line):
             if pending_question:
                 questions.append(pending_question)
             pending_question = {
@@ -261,7 +261,7 @@ def parse_docx(filepath: str) -> list[dict]:
             continue
 
         # 题号+题目在同一行（如 "1.1 问题文本"）
-        m = re.match(r'^(\d+\.\d+)\s+(.+)', line)
+        m = re.match(r'^(\d+\.\d+)\.?\s*(.+)', line)
         if m:
             if pending_question:
                 questions.append(pending_question)
@@ -273,8 +273,8 @@ def parse_docx(filepath: str) -> list[dict]:
             })
             continue
 
-        # 大类标题（如 "1. 标题文本"）
-        sec = re.match(r'^(\d+)\.\s+(.+)', line)
+        # 大类标题（如 "1. 标题文本" 或 "1.标题文本" 无空格）
+        sec = re.match(r'^(\d+)\.\s*(.+)', line)
         if sec:
             if pending_question:
                 questions.append(pending_question)
