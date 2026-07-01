@@ -480,23 +480,17 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
                     continue
             time.sleep(0.5)
 
-            # 计算实际内容高度并截图
-            content_h = page.evaluate("document.body.scrollHeight") or 5000
-            orig_size = page.viewport_size or {"width": 1280, "height": 900}
-            page.set_viewport_size({"width": orig_size.get("width", 1280), "height": content_h + 200})
-            time.sleep(0.5)
-
+            # 用 full_page 截图（CSS 已展开所有容器，body 高度现在反映真实内容高度）
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
-            page.screenshot(path=screenshot_path)
+            page.screenshot(path=screenshot_path, full_page=True)
 
-            # 恢复：移除注入样式、恢复视口、清除红框
+            # 恢复：移除注入样式、清除红框
             page.evaluate("""
                 const s = document.getElementById('__screenshot_expand__');
                 if (s) s.remove();
             """)
-            page.set_viewport_size(orig_size)
             for sel in resp_sels:
                 try:
                     page.evaluate(f"""
