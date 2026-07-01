@@ -454,13 +454,14 @@ def save_to_excel(results: list[dict], output_path: str):
     # ======== Sheet 1: 详细结果 ========
     ws = wb.active
     ws.title = "测试详细结果"
-    headers = ["日期", "具体时间", "题目分类", "题号", "测试题目", "测试模型",
+    headers = ["日期", "具体时间", "题目分类", "题号", "语言", "测试题目", "测试模型",
                "是否成功", "模型回答", "错误信息"]
     write_header(ws, headers)
 
     for i, r in enumerate(results, 2):
         vals = [r.get("test_date", ""), r.get("test_time", ""),
                 r.get("category", ""), r.get("question_num", ""),
+                r.get("doc_lang", ""),
                 r.get("question_text", ""), r.get("model_name", ""),
                 "✓ 成功" if r.get("success") else "✗ 失败",
                 r.get("model_response", ""), r.get("error") or ""]
@@ -468,15 +469,15 @@ def save_to_excel(results: list[dict], output_path: str):
         for c, v in enumerate(vals, 1):
             cell = ws.cell(row=i, column=c, value=v)
             cell.font = c_font; cell.border = border
-            cell.alignment = c_center if c in (1, 2, 4, 6, 7) else c_align
-            if c == 7:
+            cell.alignment = c_center if c in (1, 2, 4, 5, 7, 8) else c_align
+            if c == 8:
                 cell.fill = row_fill
 
     # 行高 16 磅
     for row in ws.iter_rows(min_row=1, max_row=len(results) + 1):
         ws.row_dimensions[row[0].row].height = 16
 
-    for col, w in {1: 14, 2: 12, 3: 28, 4: 8, 5: 48, 6: 22, 7: 10, 8: 58, 9: 28}.items():
+    for col, w in {1: 14, 2: 12, 3: 28, 4: 8, 5: 10, 6: 48, 7: 22, 8: 10, 9: 58, 10: 28}.items():
         ws.column_dimensions[get_column_letter(col)].width = w
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{len(results) + 1}"
@@ -586,6 +587,8 @@ def main():
     parser.add_argument("--timeout", type=int, default=120, help="单次请求超时秒数（默认 120）")
     parser.add_argument("--answer-lang", "-l", default=DEFAULT_ANSWER_LANG,
                         help=f"要求模型回答的语言（默认: {DEFAULT_ANSWER_LANG}）。可选: zh/en/auto")
+    parser.add_argument("--doc-lang", default="",
+                        help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
     parser.add_argument("--key", "-k", action="append", default=None,
                         help="API key，格式: 厂商:密钥。可多次指定。\n"
                              "例如: --key openai:sk-xxx --key anthropic:sk-ant-xxx\n"
@@ -748,6 +751,7 @@ def main():
                 "test_time": test_time_detail,
                 "category": q["category"],
                 "question_num": q["question_num"],
+                "doc_lang": args.doc_lang,
                 "question_text": q["question_text"],
                 "model_name": mn,
                 "model_response": result["response"],

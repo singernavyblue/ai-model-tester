@@ -420,7 +420,7 @@ def send_question(page, handler, question_text, timeout=120000):
 def run_browser_test(services: list[str], questions: list[dict],
                      output_path: str, headless: bool = False,
                      user_data_dir: str = None, question_delay: float = 3.0,
-                     answer_lang: str = "zh"):
+                     answer_lang: str = "zh", doc_lang: str = ""):
     """主测试流程：对每个服务、每个问题执行网页自动化测试。"""
     sync_playwright = ensure_playwright()
 
@@ -464,7 +464,7 @@ def run_browser_test(services: list[str], questions: list[dict],
                     print(f"  ❌ 无法访问该服务，跳过")
                     for q in questions:
                         all_results.append(_fail_result(q, svc_key, handler,
-                                                        f"无法访问: {e2}"))
+                                                        f"无法访问: {e2}", doc_lang))
                     continue
 
             # 检查是否需要登录
@@ -503,6 +503,7 @@ def run_browser_test(services: list[str], questions: list[dict],
                     "test_time": test_time,
                     "category": q["category"],
                     "question_num": q_num,
+                    "doc_lang": doc_lang,
                     "question_text": q_text,
                     "model_name": f"{handler['name']} (网页)",
                     "model_response": result["response"],
@@ -529,7 +530,7 @@ def run_browser_test(services: list[str], questions: list[dict],
     return all_results
 
 
-def _fail_result(question: dict, svc_key: str, handler: dict, error: str) -> dict:
+def _fail_result(question: dict, svc_key: str, handler: dict, error: str, doc_lang: str = "") -> dict:
     """生成失败记录。"""
     now = datetime.now()
     return {
@@ -537,6 +538,7 @@ def _fail_result(question: dict, svc_key: str, handler: dict, error: str) -> dic
         "test_time": now.strftime("%H:%M"),
         "category": question.get("category", ""),
         "question_num": question.get("question_num", ""),
+        "doc_lang": doc_lang,
         "question_text": question.get("question_text", ""),
         "model_name": f"{handler['name']} (网页)",
         "model_response": "",
@@ -582,13 +584,14 @@ def save_to_excel(results: list[dict], output_path: str):
     # ======== Sheet 1: 详细结果 ========
     ws = wb.active
     ws.title = "测试详细结果"
-    headers = ["日期", "具体时间", "题目分类", "题号", "测试题目", "测试模型",
+    headers = ["日期", "具体时间", "题目分类", "题号", "语言", "测试题目", "测试模型",
                "是否成功", "模型回答", "错误信息"]
     write_header(ws, headers)
 
     for i, r in enumerate(results, 2):
         vals = [r.get("test_date", ""), r.get("test_time", ""),
                 r.get("category", ""), r.get("question_num", ""),
+                r.get("doc_lang", ""),
                 r.get("question_text", ""), r.get("model_name", ""),
                 "✓ 成功" if r.get("success") else "✗ 失败",
                 r.get("model_response", ""), r.get("error") or ""]
@@ -596,14 +599,14 @@ def save_to_excel(results: list[dict], output_path: str):
         for c, v in enumerate(vals, 1):
             cell = ws.cell(row=i, column=c, value=v)
             cell.font = c_font; cell.border = border
-            cell.alignment = c_center if c in (1, 2, 4, 6, 7) else c_align
-            if c == 7:
+            cell.alignment = c_center if c in (1, 2, 4, 5, 7, 8) else c_align
+            if c == 8:
                 cell.fill = row_fill
 
     for row in ws.iter_rows(min_row=1, max_row=len(results) + 1):
         ws.row_dimensions[row[0].row].height = 16
 
-    for col, w in {1: 14, 2: 12, 3: 28, 4: 8, 5: 48, 6: 22, 7: 10, 8: 58, 9: 28}.items():
+    for col, w in {1: 14, 2: 12, 3: 28, 4: 8, 5: 10, 6: 48, 7: 22, 8: 10, 9: 58, 10: 28}.items():
         ws.column_dimensions[get_column_letter(col)].width = w
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{len(results) + 1}"
@@ -777,6 +780,8 @@ def main():
                         help="无头模式（不显示浏览器窗口，需已登录）")
     parser.add_argument("--answer-lang", "-l", default="zh",
                         help="要求模型回答的语言（默认: zh）。可选: zh/en/auto")
+    parser.add_argument("--doc-lang", default="",
+                        help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
     parser.add_argument("--user-data-dir",
                         help="浏览器用户数据目录（默认 ~/.claude/skills/model-tester/browser-data）")
     parser.add_argument("--list-services", action="store_true",
@@ -852,6 +857,7 @@ def main():
         user_data_dir=args.user_data_dir,
         question_delay=args.delay,
         answer_lang=args.answer_lang,
+        doc_lang=args.doc_lang,
     )
 
     # 总结
