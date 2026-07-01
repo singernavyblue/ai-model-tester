@@ -731,8 +731,9 @@ def main():
     task_count = 0
 
     for q in questions:
-        # 构建完整提示：语言指令 + 原问题
-        full_question = lang_prompt + q["question_text"] if lang_prompt else q["question_text"]
+        # 构建完整提示：题号 + 原问题 + 语言指令（放最后）
+        full_question = f"[{q['question_num']}] {q['question_text']}"
+        full_question = full_question + "\n\n" + lang_prompt if lang_prompt else full_question
 
         for mn in model_names:
             task_count += 1
