@@ -822,7 +822,7 @@ def main():
 
     # 输出路径
     if args.output is None:
-        args.output = f"网页测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        args.output = str(input_path.parent / f"网页测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
     # 解析题目
     print("📖 正在解析测试题...")

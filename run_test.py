@@ -688,7 +688,7 @@ def main():
 
     # --- 输出路径 ---
     if args.output is None:
-        args.output = f"测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        args.output = str(input_path.parent / f"测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
 
     # --- 开始 ---
     print("=" * 70)
