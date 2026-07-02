@@ -790,8 +790,8 @@ def save_to_excel(results: list[dict], output_path: str):
             r.get("original_question", r.get("question_text", "")),
             r.get("model_response", ""),
             is_anomaly,
-            r.get("error") or "",
-            r.get("note", ""),
+            (r.get("error") or ""),
+            (r.get("note") or ""),
         ]
         for c, v in enumerate(vals, 1):
             cell = ws.cell(row=i, column=c, value=v)
