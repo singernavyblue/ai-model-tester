@@ -490,7 +490,8 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
 def run_browser_test(services: list[str], questions: list[dict],
                      output_path: str, headless: bool = False,
                      user_data_dir: str = None, question_delay: float = 3.0,
-                     answer_lang: str = "zh", doc_lang: str = "", question_limit: int = 0):
+                     answer_lang: str = "zh", doc_lang: str = "", question_limit: int = 0,
+                     monitoring_batch: str = ""):
     """主测试流程：对每个服务、每个问题执行网页自动化测试。"""
     sync_playwright = ensure_playwright()
 
@@ -538,7 +539,7 @@ def run_browser_test(services: list[str], questions: list[dict],
                     print(f"  ❌ 无法访问该服务，跳过")
                     for q in questions:
                         all_results.append(_fail_result(q, svc_key, handler,
-                                                        f"无法访问: {e2}", doc_lang))
+                                                        f"无法访问: {e2}", doc_lang, monitoring_batch))
                     continue
 
             # 检查是否需要登录
@@ -563,7 +564,7 @@ def run_browser_test(services: list[str], questions: list[dict],
                     print(f"  ❌ 超时未登录，跳过该服务")
                     for q in questions:
                         all_results.append(_fail_result(q, svc_key, handler,
-                                                        "未登录，跳过", doc_lang))
+                                                        "未登录，跳过", doc_lang, monitoring_batch))
                     continue
 
             # 逐题测试
@@ -593,13 +594,18 @@ def run_browser_test(services: list[str], questions: list[dict],
                     "category": q["category"],
                     "question_num": q_num,
                     "doc_lang": doc_lang,
+                    "original_question": q["question_text"],
                     "question_text": q_text,
                     "model_name": f"{handler['name']} (网页)",
+                    "model_short": handler["name"],
+                    "model_family": handler["provider"],
                     "model_response": result["response"],
                     "success": result["success"],
                     "error": result.get("error"),
                     "has_issue": "",
                     "screenshot": result.get("screenshot"),
+                    "monitoring_batch": monitoring_batch or "",
+                    "note": "",
                 })
 
                 # 题间延迟
@@ -701,7 +707,7 @@ def judge_responses(results: list[dict], api_key: str, delay: float = 0.5) -> li
     return judged
 
 
-def _fail_result(question: dict, svc_key: str, handler: dict, error: str, doc_lang: str = "") -> dict:
+def _fail_result(question: dict, svc_key: str, handler: dict, error: str, doc_lang: str = "", monitoring_batch: str = "") -> dict:
     """生成失败记录。"""
     now = datetime.now()
     return {
@@ -710,13 +716,18 @@ def _fail_result(question: dict, svc_key: str, handler: dict, error: str, doc_la
         "category": question.get("category", ""),
         "question_num": question.get("question_num", ""),
         "doc_lang": doc_lang,
+        "original_question": question.get("question_text", ""),
         "question_text": question.get("question_text", ""),
         "model_name": f"{handler['name']} (网页)",
+        "model_short": handler["name"],
+        "model_family": handler["provider"],
         "model_response": "",
         "success": False,
         "error": error,
         "has_issue": "N/A",
         "screenshot": None,
+        "monitoring_batch": monitoring_batch,
+        "note": "",
     }
 
 
@@ -757,72 +768,76 @@ def save_to_excel(results: list[dict], output_path: str):
     # ======== Sheet 1: 详细结果 ========
     ws = wb.active
     ws.title = "测试详细结果"
-    headers = ["日期", "具体时间", "题目分类", "题号", "语言", "测试题目", "测试模型",
-               "是否成功", "是否有错误", "模型回答", "错误信息", "截图"]
+    headers = ["record_id", "monitoring_batch", "date", "time_point", "model",
+               "model_family", "language", "input_content", "output_content",
+               "is_anomaly", "anomaly_reason", "note", "screenshot"]
     write_header(ws, headers)
 
     from openpyxl.drawing.image import Image as XlImage
     import io, os as _os
 
     for i, r in enumerate(results, 2):
-        vals = [r.get("test_date", ""), r.get("test_time", ""),
-                r.get("category", ""), r.get("question_num", ""),
-                r.get("doc_lang", ""),
-                r.get("question_text", ""), r.get("model_name", ""),
-                "✓ 成功" if r.get("success") else "✗ 失败",
-                r.get("has_issue", ""),
-                r.get("model_response", ""), r.get("error") or ""]
-        row_fill = ok_fill if r.get("success") else bad_fill
+        has_issue = r.get("has_issue", "")
+        is_anomaly = "TRUE" if has_issue == "是" else ("FALSE" if has_issue == "否" else has_issue)
+        vals = [
+            i - 1,
+            r.get("monitoring_batch", ""),
+            r.get("test_date", ""),
+            r.get("test_time", ""),
+            r.get("model_short", r.get("model_name", "")),
+            r.get("model_family", ""),
+            r.get("doc_lang", ""),
+            r.get("original_question", r.get("question_text", "")),
+            r.get("model_response", ""),
+            is_anomaly,
+            r.get("error") or "",
+            r.get("note", ""),
+        ]
         for c, v in enumerate(vals, 1):
             cell = ws.cell(row=i, column=c, value=v)
             cell.font = c_font; cell.border = border
-            cell.alignment = c_center if c in (1, 2, 4, 5, 7, 8, 9) else c_align
-            if c == 8:
-                cell.fill = row_fill
+            cell.alignment = c_center if c in (1, 3, 4, 5, 6, 7, 10) else c_align
 
-        # 嵌入截图（仅当"是否有错误"为"是"且有截图文件时）
+        # 嵌入截图
         screenshot = r.get("screenshot")
-        if r.get("has_issue") == "是" and screenshot and _os.path.exists(screenshot):
+        if has_issue == "是" and screenshot and _os.path.exists(screenshot):
             try:
                 img = XlImage(screenshot)
-                # 缩放到合适大小（宽 320px 保持比例）
                 ratio = 320 / img.width
                 img.width = 320
                 img.height = int(img.height * ratio)
-                img_cell = f"L{i}"
-                ws.add_image(img, img_cell)
-                # 截图文件名写入单元格作为标注
-                ws.cell(row=i, column=12, value=_os.path.basename(screenshot)).font = c_font
-                ws.cell(row=i, column=12).alignment = c_center
-                ws.cell(row=i, column=12).border = border
+                ws.add_image(img, f"M{i}")
+                cell = ws.cell(row=i, column=13)
+                cell.value = _os.path.basename(screenshot)
+                cell.font = c_font; cell.alignment = c_center; cell.border = border
             except Exception:
-                ws.cell(row=i, column=12, value="截图嵌入失败").font = c_font
+                ws.cell(row=i, column=13, value="嵌入失败").font = c_font
 
-    # 行高：有问题且有截图的加高，其余 16
+    # 行高
     for i, r in enumerate(results, 2):
-        if r.get("has_issue") == "是" and r.get("screenshot"):
-            ws.row_dimensions[i].height = 200
-        else:
-            ws.row_dimensions[i].height = 16
-    ws.row_dimensions[1].height = 16  # 表头
+        ws.row_dimensions[i].height = 200 if (r.get("has_issue") == "是" and r.get("screenshot")) else 16
+    ws.row_dimensions[1].height = 16
 
-    for col, w in {1: 14, 2: 12, 3: 28, 4: 8, 5: 10, 6: 48, 7: 22, 8: 10, 9: 12, 10: 58, 11: 28, 12: 38}.items():
+    for col, w in {1: 8, 2: 16, 3: 14, 4: 12, 5: 18, 6: 18, 7: 10,
+                   8: 50, 9: 60, 10: 12, 11: 28, 12: 20, 13: 38}.items():
         ws.column_dimensions[get_column_letter(col)].width = w
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{len(results) + 1}"
 
     # ======== Sheet 2: 汇总统计 ========
     ws2 = wb.create_sheet("汇总统计")
-    write_header(ws2, ["模型", "总题数", "成功", "失败", "成功率"])
+    write_header(ws2, ["模型", "总题数", "成功", "失败", "异常数"])
     model_stats = {}
     for r in results:
         m = r.get("model_name", "unknown")
-        model_stats.setdefault(m, {"total": 0, "success": 0, "fail": 0})
+        model_stats.setdefault(m, {"total": 0, "success": 0, "fail": 0, "anomaly": 0})
         model_stats[m]["total"] += 1
         model_stats[m]["success" if r.get("success") else "fail"] += 1
+        if r.get("has_issue") == "是":
+            model_stats[m]["anomaly"] += 1
     for i, (m, s) in enumerate(sorted(model_stats.items()), 2):
         rate = f"{s['success']/s['total']*100:.1f}%" if s["total"] else "N/A"
-        for c, v in enumerate([m, s["total"], s["success"], s["fail"], rate], 1):
+        for c, v in enumerate([m, s["total"], s["success"], s["fail"], s["anomaly"]], 1):
             cell = ws2.cell(row=i, column=c, value=v)
             cell.font = c_font; cell.alignment = c_center; cell.border = border
     for row in ws2.iter_rows(min_row=1, max_row=len(model_stats) + 1):
@@ -1003,6 +1018,8 @@ def main():
                         help="要求模型回答的语言（默认: zh）。可选: zh/en/auto")
     parser.add_argument("--doc-lang", default="",
                         help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
+    parser.add_argument("--monitoring-batch", default="",
+                        help="监测批次标识（如 7.2测试题）")
     parser.add_argument("--limit", "-n", type=int, default=0,
                         help="只测试前 N 道题（默认 0 表示全部）")
     parser.add_argument("--judge", action="store_true",
@@ -1092,6 +1109,7 @@ def main():
         answer_lang=args.answer_lang,
         doc_lang=args.doc_lang,
         question_limit=args.limit,
+        monitoring_batch=args.monitoring_batch,
     )
 
     # 审核（可选）
