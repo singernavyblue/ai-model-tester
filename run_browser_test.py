@@ -894,6 +894,17 @@ def parse_docx(filepath: str) -> list[dict]:
     pending_question = None  # 拆分格式：上一行是独立题号
 
     for line in paragraphs:
+        # 独立题号：单独的纯数字（如 "1"）独占一行，后面段落是题目正文
+        if re.match(r'^\d+\s*$', line):
+            if pending_question:
+                questions.append(pending_question)
+            pending_question = {
+                "category": current_category,
+                "question_num": line.strip(),
+                "question_text": "",
+            }
+            continue
+
         # 独立的题号（如 "1.1" 独占一行），后面段落是题目正文
         if re.match(r'^\d+\.\d+\.?\s*$', line):
             if pending_question:
@@ -919,11 +930,21 @@ def parse_docx(filepath: str) -> list[dict]:
             continue
 
         # 大类标题（如 "1. 标题文本" 或 "1.标题文本" 无空格）
-        sec = re.match(r'^(\d+)\.\s*(.+)', line)
+        # 如果之前的 category 下没有子题，把 category 本身当作一道题
+        sec = re.match(r'^(\d+)\.\s+(.+)', line)
         if sec:
             if pending_question:
                 questions.append(pending_question)
                 pending_question = None
+            # 上一个大类如果没有子题，把它变成一道题
+            if current_category:
+                prev_sec = re.match(r'^(\d+)\.\s+(.+)', current_category)
+                if prev_sec and not any(q['category'] == current_category for q in questions):
+                    questions.append({
+                        "category": "",
+                        "question_num": prev_sec.group(1),
+                        "question_text": prev_sec.group(2).strip(),
+                    })
             current_category = line
             continue
 
