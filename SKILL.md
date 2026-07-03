@@ -71,6 +71,23 @@ python ~/.claude/skills/model-tester/run_browser_test.py \
 - 每个问题自动开启新对话，避免上下文干扰
 - 网页结构可能随服务更新变化，如提取失败会记录到 Excel 的"错误信息"列
 
+### 合并多个测试结果
+
+```bash
+# 合并文件夹下所有网页测试结果
+python ~/.claude/skills/model-tester/merge_results.py --input 测试结果/
+
+# 按文件名匹配合并
+python ~/.claude/skills/model-tester/merge_results.py \
+    --input 测试结果/ --pattern "7.2*网页测试*"
+
+# 指定输出文件名
+python ~/.claude/skills/model-tester/merge_results.py \
+    --input 测试结果/ --output 7.2汇总.xlsx
+```
+
+合并后生成统一 Excel（3 个 Sheet），截图也会迁移。
+
 ---
 
 ## API 模式
