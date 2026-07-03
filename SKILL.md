@@ -71,6 +71,22 @@ python ~/.claude/skills/model-tester/run_browser_test.py \
 - 每个问题自动开启新对话，避免上下文干扰
 - 网页结构可能随服务更新变化，如提取失败会记录到 Excel 的"错误信息"列
 
+### 数据清洗
+
+```bash
+# 清除 output_content 中的题号前缀和语言指令
+python ~/.claude/skills/model-tester/clean_results.py --input 汇总.xlsx
+
+# 同时翻译非中文内容为中文
+python ~/.claude/skills/model-tester/clean_results.py \
+    --input 汇总.xlsx --translate-key sk-xxx
+```
+
+清洗内容：
+- 删除 `[1.1]` 题号前缀
+- 删除 `【重要指令】你必须只使用中文回答...` 等语言指令
+- 可选：将非中文回答翻译为中文
+
 ### 合并多个测试结果
 
 ```bash
