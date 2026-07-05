@@ -432,7 +432,7 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     # 5. 提取回答
     response_text = extract_response(page, handler)
 
-    # 6. 截取完整问答——直接截图聊天容器元素，确保问题+回答全部捕获
+    # 6. 截取完整问答（问题+回答全貌），红框标出回答
     screenshot_path = None
     if screenshot_dir and response_text and response_text != "[未能提取回答]":
         try:
@@ -445,32 +445,25 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
             """)
             time.sleep(0.3)
 
-            # 找到聊天主容器（按优先级尝试）
-            chat_sel = page.evaluate("""
-                const candidates = [
-                    '[role="list"]', '[role="main"]', 'main',
-                    '[class*="conversation"]', '[class*="chat-container"]',
-                    '[class*="messages-container"]', '[class*="scroll"]'
-                ];
-                for (const sel of candidates) {
-                    const el = document.querySelector(sel);
-                    if (el && el.scrollHeight > 500) return sel;
-                }
-                return 'body';
+            # 计算页面实际内容高度
+            content_h = page.evaluate("""
+                let maxBottom = 0;
+                document.querySelectorAll('p, div[class*="message"], div[class*="prose"], [class*="response"], [class*="msg"]')
+                    .forEach(el => { const r = el.getBoundingClientRect(); if(r.bottom > maxBottom) maxBottom = r.bottom; });
+                return Math.max(maxBottom + 100, document.body.scrollHeight, 2000);
             """)
-            chat_el = page.query_selector(chat_sel)
+            # 调大视口高度以容纳全部内容
+            orig_size = page.viewport_size or {"width": 1280, "height": 900}
+            page.set_viewport_size({"width": orig_size.get("width", 1280), "height": int(content_h)})
+            time.sleep(0.5)
 
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
+            page.screenshot(path=screenshot_path)
 
-            if chat_el:
-                # 元素截图——捕获完整内容，不受滚动限制
-                chat_el.screenshot(path=screenshot_path)
-            else:
-                page.screenshot(path=screenshot_path, full_page=True)
-
-            # 清理红框
+            # 恢复视口、清除红框
+            page.set_viewport_size(orig_size)
             page.evaluate("""
                 document.querySelectorAll('*').forEach(el => { if(el.style.border && el.style.border.includes('red')){ el.style.border='';el.style.borderRadius='';el.style.padding=''; } });
             """)
