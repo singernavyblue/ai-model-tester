@@ -633,11 +633,18 @@ def run_browser_test(services: list[str], questions: list[dict],
                     continue
                 out = str(r.get("model_response", "") or "")
                 inp = str(r.get("original_question", "") or "")
-                # 条件1: 回答过短
-                if len(out) < 300:
+                # 检查题目是否要求简答
+                short_expected = bool(re.search(
+                    r'只回答|只答|仅回答|请回答.{0,5}[是会]|回答.{0,3}[是否]|'
+                    r'只写|仅写|回答"|答案"|二选一|选[一二]|'
+                    r'请仅|只要回答|直接回答|简短回答',
+                    inp
+                ))
+                # 条件1: 回声回答（output 与 input 几乎相同）
+                if len(out) < 500 and inp and (inp[:50] in out[:100] or out.strip() == inp.strip()):
                     bad_indices.append(idx)
-                # 条件2: 回答与输入高度重合（回声）
-                elif len(out) < 500 and inp and (inp[:50] in out[:100] or out.strip() == inp.strip()):
+                # 条件2: 非简答题但回答过短
+                elif not short_expected and len(out) < 300:
                     bad_indices.append(idx)
 
             if not bad_indices:
@@ -690,7 +697,13 @@ def run_browser_test(services: list[str], questions: list[dict],
             # 标记仍未修复的
             for r in all_results:
                 out = str(r.get("model_response", "") or "")
-                if len(out) < 300 and r.get("success"):
+                inp = str(r.get("original_question", "") or "")
+                short_expected = bool(re.search(
+                    r'只回答|只答|仅回答|请回答.{0,5}[是会]|回答.{0,3}[是否]|'
+                    r'只写|仅写|回答"|答案"|二选一|选[一二]',
+                    inp
+                ))
+                if len(out) < 300 and r.get("success") and not short_expected:
                     r["note"] = (r.get("note") or "") + "；复查后仍过短"
 
     return all_results
