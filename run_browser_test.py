@@ -449,7 +449,7 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
 
-            # 强制展开所有容器 + 计算真实高度
+            # CSS 强制展开所有固定容器，确保 full_page 捕获完整页面
             page.evaluate("""
                 document.querySelectorAll('*').forEach(el => {
                     const s = getComputedStyle(el);
@@ -464,26 +464,14 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
                 });
             """)
             time.sleep(0.5)
-            # 滚到底再滚回顶，确保所有懒加载内容渲染
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(0.5)
             page.evaluate("window.scrollTo(0, 0)")
             time.sleep(0.3)
-
-            # 计算实际内容高度 + 充足边距
-            real_h = page.evaluate("""
-                let maxBottom = 0;
-                document.querySelectorAll('p, div, section, article, [class*="message"], [class*="prose"], [class*="response"]')
-                    .forEach(el => { const r = el.getBoundingClientRect(); if(r.bottom > maxBottom) maxBottom = r.bottom; });
-                return Math.max(maxBottom + 400, document.body.scrollHeight + 400, 2500);
-            """)
-            orig = page.viewport_size or {"width": 1280, "height": 900}
-            page.set_viewport_size({"width": orig.get("width", 1280), "height": int(real_h)})
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(0.3)
 
-            # 视口截图（视口已扩大到内容高度，所以完整捕获）
-            page.screenshot(path=screenshot_path)
-            page.set_viewport_size(orig)
+            page.screenshot(path=screenshot_path, full_page=True)
 
             # 清除红框
             page.evaluate("""
