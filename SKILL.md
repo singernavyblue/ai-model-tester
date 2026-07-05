@@ -143,10 +143,12 @@ python ~/.claude/skills/model-tester/merge_results.py \
 ### 第二步：收集 API Key
 
 **必须询问用户是否需要异常审核功能**：
-> "是否需要开启异常审核？开启后会用 DeepSeek 自动判断每个回答是否有问题，有问题会自动截图嵌入 Excel。需要提供 DeepSeek API Key。"
+> "是否需要开启异常审核？开启后会自动判断每个回答是否有问题，有问题会截图嵌入 Excel。
+> 支持两个裁判模型：DeepSeek 或 豆包(Doubao)。请选择模型并提供对应的 API Key。"
 
-- 如果用户需要 → 请用户提供 DeepSeek API key（格式 `sk-xxx`），运行时会加 `--judge-key`
-- 如果用户不需要 → 加 `--no-judge` 跳过审核
+- 用户选择 DeepSeek → `--judge-model deepseek --judge-key sk-xxx`
+- 用户选择豆包 → `--judge-model doubao --judge-key xxx`
+- 用户不需要 → `--no-judge` 跳过审核
 
 **API 模式**还需询问对应厂商的 API key。
 
