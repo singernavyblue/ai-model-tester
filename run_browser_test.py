@@ -432,50 +432,40 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     # 5. 提取回答
     response_text = extract_response(page, handler)
 
-    # 6. 截取当前可见的问答区域，红框标出回答
+    # 6. 截取完整问答（问题+回答全部），full_page，红框标出回答
     screenshot_path = None
     if screenshot_dir and response_text and response_text != "[未能提取回答]":
         try:
-            # 滚动页面到问答可见区域
+            page.evaluate("""
+                const s = document.createElement('style');
+                s.id = '__ss_exp__';
+                s.textContent = 'html,body,#root,#__next,[class*="chat"],[class*="conversation"],[class*="messages"],[class*="scroll"],[class*="main"],main,section{overflow:visible!important;height:auto!important;max-height:none!important}';
+                document.head.appendChild(s);
+            """)
+            time.sleep(0.3)
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(0.5)
-            # 再往回滚一点，确保问题和回答同屏可见
-            page.evaluate("window.scrollBy(0, -400)")
+            page.evaluate("window.scrollTo(0, 0)")
             time.sleep(0.3)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(0.5)
 
-            # 给最近一条可见的大段文本加红框
             page.evaluate("""
                 const all = document.querySelectorAll('p, div[class*="message"], div[class*="prose"], [class*="response"]');
                 let best = null, bestLen = 0;
-                all.forEach(el => {
-                    const t = el.innerText || '';
-                    if (t.length > bestLen && t.length > 50) { bestLen = t.length; best = el; }
-                });
-                if (best) {
-                    best.style.setProperty('border', '3px solid red', 'important');
-                    best.style.setProperty('border-radius', '4px', 'important');
-                    best.style.setProperty('padding', '6px', 'important');
-                    best.scrollIntoView({block: 'center', behavior: 'instant'});
-                }
+                all.forEach(el => { const t = el.innerText || ''; if(t.length > bestLen && t.length > 50) { bestLen = t.length; best = el; } });
+                if(best) { best.style.setProperty('border','3px solid red','important'); best.style.setProperty('border-radius','4px','important'); best.style.setProperty('padding','6px','important'); }
             """)
-            time.sleep(0.4)
+            time.sleep(0.3)
 
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
-            # 视口截图——截取当前可见区域
-            page.screenshot(path=screenshot_path)
+            page.screenshot(path=screenshot_path, full_page=True)
 
-            # 清除红框
             page.evaluate("""
-                const all = document.querySelectorAll('*');
-                all.forEach(el => {
-                    if (el.style.border && el.style.border.includes('red')) {
-                        el.style.border = '';
-                        el.style.borderRadius = '';
-                        el.style.padding = '';
-                    }
-                });
+                const s = document.getElementById('__ss_exp__'); if(s) s.remove();
+                document.querySelectorAll('*').forEach(el => { if(el.style.border && el.style.border.includes('red')){ el.style.border='';el.style.borderRadius='';el.style.padding=''; } });
             """)
         except Exception as e:
             screenshot_path = f"截图失败: {e}"
