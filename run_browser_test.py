@@ -882,9 +882,9 @@ def save_to_excel(results: list[dict], output_path: str):
             cell.font = c_font; cell.border = border
             cell.alignment = c_center if c in (1, 3, 4, 5, 6, 7, 10) else c_align
 
-        # 嵌入截图
+        # 嵌入截图（始终嵌入，有截图的就放）
         screenshot = r.get("screenshot")
-        if has_issue == "是" and screenshot and _os.path.exists(screenshot):
+        if screenshot and _os.path.exists(screenshot):
             try:
                 img = XlImage(screenshot)
                 ratio = 320 / img.width
@@ -899,7 +899,7 @@ def save_to_excel(results: list[dict], output_path: str):
 
     # 行高
     for i, r in enumerate(results, 2):
-        ws.row_dimensions[i].height = 200 if (r.get("has_issue") == "是" and r.get("screenshot")) else 16
+        ws.row_dimensions[i].height = 200 if r.get("screenshot") else 16
     ws.row_dimensions[1].height = 16
 
     for col, w in {1: 8, 2: 16, 3: 14, 4: 12, 5: 18, 6: 18, 7: 10,
@@ -1102,8 +1102,8 @@ def main():
                         help="要求模型回答的语言（默认: zh）。可选: zh/en/auto")
     parser.add_argument("--doc-lang", default="",
                         help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
-    parser.add_argument("--retry", "-r", type=int, default=0,
-                        help="自动复查轮数：检测短回答/回声回答后自动重测（默认 0 = 不复查）")
+    parser.add_argument("--retry", "-r", type=int, default=1,
+                        help="自动复查轮数：检测短回答/回声回答后自动重测（默认 1）")
     parser.add_argument("--monitoring-batch", default="",
                         help="监测批次标识（如 7.2测试题）")
     parser.add_argument("--limit", "-n", type=int, default=0,
