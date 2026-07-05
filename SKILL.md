@@ -116,9 +116,6 @@ python ~/.claude/skills/model-tester/merge_results.py \
 
 首先询问用户：使用 **API 模式** 还是 **网页模式**？
 
-- API 模式：需要 API key，速度快
-- 网页模式：无需 key，但需要浏览器登录
-
 ### 第一步：选择模型/服务
 
 **API 模式** — 不要使用 AskUserQuestion 选择模型（该工具仅支持 4 个选项）。直接展示表格。
@@ -145,14 +142,13 @@ python ~/.claude/skills/model-tester/merge_results.py \
 
 ### 第二步：收集 API Key
 
-根据用户选择的模型确定需要哪些厂商的 API key。然后使用 AskUserQuestion 收集 key（通常 1-3 个厂商，不超过 4 个选项限制）：
+**必须询问用户是否需要异常审核功能**：
+> "是否需要开启异常审核？开启后会用 DeepSeek 自动判断每个回答是否有问题，有问题会自动截图嵌入 Excel。需要提供 DeepSeek API Key。"
 
-选项格式：
-- "我来设置环境变量" — 用户自行 `! export KEY=xxx`
-- "直接粘贴 Anthropic Key" — 用户在 Other 输入框粘贴
-- ...
+- 如果用户需要 → 请用户提供 DeepSeek API key（格式 `sk-xxx`），运行时会加 `--judge-key`
+- 如果用户不需要 → 加 `--no-judge` 跳过审核
 
-如果只有 1-2 个厂商，也可以直接让用户告诉我 key，不用 AskUserQuestion。
+**API 模式**还需询问对应厂商的 API key。
 
 ### 第三步：确认并运行
 
