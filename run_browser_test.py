@@ -449,7 +449,25 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
 
-            # full_page截图，失败回退视口截图
+            # 强制展开所有固定高度/overflow容器，确保 full_page 捕获完整内容
+            page.evaluate("""
+                document.querySelectorAll('*').forEach(el => {
+                    const s = getComputedStyle(el);
+                    if (s.overflow !== 'visible' || s.overflowY !== 'visible') {
+                        el.style.setProperty('overflow', 'visible', 'important');
+                        el.style.setProperty('overflow-y', 'visible', 'important');
+                    }
+                    if (s.maxHeight && s.maxHeight !== 'none')
+                        el.style.setProperty('max-height', 'none', 'important');
+                    if (s.height && (s.height.includes('vh') || s.height === '100%'))
+                        el.style.setProperty('height', 'auto', 'important');
+                });
+            """)
+            time.sleep(0.5)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(0.3)
+
+            # full_page截图
             try:
                 page.screenshot(path=screenshot_path, full_page=True)
             except Exception:
