@@ -882,9 +882,9 @@ def save_to_excel(results: list[dict], output_path: str):
             cell.font = c_font; cell.border = border
             cell.alignment = c_center if c in (1, 3, 4, 5, 6, 7, 10) else c_align
 
-        # 嵌入截图（始终嵌入，有截图的就放）
+        # 嵌入截图（仅异常时嵌入）
         screenshot = r.get("screenshot")
-        if screenshot and _os.path.exists(screenshot):
+        if has_issue == "是" and screenshot and _os.path.exists(screenshot):
             try:
                 img = XlImage(screenshot)
                 ratio = 320 / img.width
@@ -899,7 +899,7 @@ def save_to_excel(results: list[dict], output_path: str):
 
     # 行高
     for i, r in enumerate(results, 2):
-        ws.row_dimensions[i].height = 200 if r.get("screenshot") else 16
+        ws.row_dimensions[i].height = 200 if (r.get("has_issue") == "是" and r.get("screenshot")) else 16
     ws.row_dimensions[1].height = 16
 
     for col, w in {1: 8, 2: 16, 3: 14, 4: 12, 5: 18, 6: 18, 7: 10,
@@ -1108,8 +1108,10 @@ def main():
                         help="监测批次标识（如 7.2测试题）")
     parser.add_argument("--limit", "-n", type=int, default=0,
                         help="只测试前 N 道题（默认 0 表示全部）")
-    parser.add_argument("--judge", action="store_true",
-                        help="用 DeepSeek 审核每个回答是否符合中国官方论调和群众普遍认识")
+    parser.add_argument("--judge", action="store_true", default=True,
+                        help="用 DeepSeek 审核回答（默认开启，无 key 自动跳过）")
+    parser.add_argument("--no-judge", action="store_false", dest="judge",
+                        help="跳过审核")
     parser.add_argument("--judge-key", default=None,
                         help="DeepSeek API key 用于审核（优先于 DEEPSEEK_API_KEY 环境变量）")
     parser.add_argument("--user-data-dir",
@@ -1203,12 +1205,11 @@ def main():
     if args.judge:
         judge_key = args.judge_key or os.environ.get("DEEPSEEK_API_KEY", "")
         if not judge_key:
-            print("❌ --judge 需要 DeepSeek API key")
-            print("   方式一: --judge-key sk-xxx")
-            print("   方式二: export DEEPSEEK_API_KEY=sk-xxx")
-            sys.exit(1)
-        print("\n🔍 正在用 DeepSeek 审核回答...")
-        results = judge_responses(results, judge_key)
+            print("\n⚠️ 未设置 DEEPSEEK_API_KEY，跳过审核")
+            print("   设置方式: export DEEPSEEK_API_KEY=sk-xxx 或 --judge-key sk-xxx")
+        else:
+            print("\n🔍 正在用 DeepSeek 审核回答...")
+            results = judge_responses(results, judge_key)
 
     # 保存 Excel
     save_to_excel(results, args.output)
