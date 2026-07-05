@@ -31,6 +31,14 @@ python run_browser_test.py --input 测试题.docx --services all
 
 支持 11 个网页服务：ChatGPT、Claude、Gemini、DeepSeek、Grok、Copilot、Perplexity、Mistral、Duck.ai、Meta AI、Character.AI。
 
+### 默认开启的功能
+
+- **智能复查**：每题回答生成后自动检查，过短或回声回答自动重测
+- **异常审核**：用 DeepSeek 判断回答是否符合规范（需设 `DEEPSEEK_API_KEY`，无 key 自动跳过）
+- **截图嵌入**：异常回答自动截取网页截图，嵌入 Excel
+
+关闭审核：`--no-judge`　　关闭复查：`--retry 0`
+
 ## 输出 Excel
 
 | Sheet | 内容 |
