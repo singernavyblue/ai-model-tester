@@ -443,27 +443,19 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
                 all.forEach(el => { const t = el.innerText || ''; if(t.length > bestLen && t.length > 50) { bestLen = t.length; best = el; } });
                 if(best) { best.style.setProperty('border','3px solid red','important'); best.style.setProperty('border-radius','4px','important'); best.style.setProperty('padding','6px','important'); }
             """)
-            time.sleep(0.3)
-
-            # 计算页面实际内容高度
-            content_h = page.evaluate("""
-                let maxBottom = 0;
-                document.querySelectorAll('p, div[class*="message"], div[class*="prose"], [class*="response"], [class*="msg"]')
-                    .forEach(el => { const r = el.getBoundingClientRect(); if(r.bottom > maxBottom) maxBottom = r.bottom; });
-                return Math.max(maxBottom + 100, document.body.scrollHeight, 2000);
-            """)
-            # 调大视口高度以容纳全部内容
-            orig_size = page.viewport_size or {"width": 1280, "height": 900}
-            page.set_viewport_size({"width": orig_size.get("width", 1280), "height": int(content_h)})
-            time.sleep(0.5)
+            time.sleep(0.2)
 
             Path(screenshot_dir).mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
-            page.screenshot(path=screenshot_path)
 
-            # 恢复视口、清除红框
-            page.set_viewport_size(orig_size)
+            # full_page截图，失败回退视口截图
+            try:
+                page.screenshot(path=screenshot_path, full_page=True)
+            except Exception:
+                page.screenshot(path=screenshot_path)
+
+            # 清除红框
             page.evaluate("""
                 document.querySelectorAll('*').forEach(el => { if(el.style.border && el.style.border.includes('red')){ el.style.border='';el.style.borderRadius='';el.style.padding=''; } });
             """)
