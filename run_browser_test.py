@@ -449,29 +449,33 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
 
-            # CSS 强制展开所有固定容器，确保 full_page 捕获完整页面
-            page.evaluate("""
-                document.querySelectorAll('*').forEach(el => {
-                    const s = getComputedStyle(el);
-                    if (s.overflow !== 'visible' || s.overflowY !== 'visible') {
-                        el.style.setProperty('overflow', 'visible', 'important');
-                        el.style.setProperty('overflow-y', 'visible', 'important');
-                    }
-                    if (s.maxHeight && s.maxHeight !== 'none')
-                        el.style.setProperty('max-height', 'none', 'important');
-                    if (s.height && (s.height.includes('vh') || s.height === '100%'))
-                        el.style.setProperty('height', 'auto', 'important');
-                });
-            """)
-            time.sleep(0.5)
+            # 先尝试普通 full_page 截图
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(0.5)
-            page.evaluate("window.scrollTo(0, 0)")
-            time.sleep(0.3)
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(0.3)
-
             page.screenshot(path=screenshot_path, full_page=True)
+
+            # 检查高度：如果截图只有视口高度（说明页面用固定容器），则用 CSS 展开重截
+            from PIL import Image as PILImage
+            try:
+                test_img = PILImage.open(screenshot_path)
+                if test_img.height < 1500:
+                    page.evaluate("""
+                        document.querySelectorAll('*').forEach(el => {
+                            const s = getComputedStyle(el);
+                            if (s.overflow !== 'visible' || s.overflowY !== 'visible') {
+                                el.style.setProperty('overflow', 'visible', 'important');
+                                el.style.setProperty('overflow-y', 'visible', 'important');
+                            }
+                            if (s.maxHeight && s.maxHeight !== 'none')
+                                el.style.setProperty('max-height', 'none', 'important');
+                        });
+                    """)
+                    time.sleep(0.3)
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    time.sleep(0.3)
+                    page.screenshot(path=screenshot_path, full_page=True)
+            except Exception:
+                pass
 
             # 清除红框
             page.evaluate("""
