@@ -491,7 +491,7 @@ def run_browser_test(services: list[str], questions: list[dict],
                      output_path: str, headless: bool = False,
                      user_data_dir: str = None, question_delay: float = 3.0,
                      answer_lang: str = "zh", doc_lang: str = "", question_limit: int = 0,
-                     monitoring_batch: str = ""):
+                     monitoring_batch: str = "", retry_rounds: int = 0):
     """主测试流程：对每个服务、每个问题执行网页自动化测试。"""
     sync_playwright = ensure_playwright()
 
@@ -621,6 +621,77 @@ def run_browser_test(services: list[str], questions: list[dict],
                         pass
 
         context.close()
+
+    # ---- 自动复查重测 ----
+    if retry_rounds > 0:
+        for rnd in range(retry_rounds):
+            # 检测有问题的回答
+            bad_indices = []
+            for idx, r in enumerate(all_results):
+                if not r.get("success"):
+                    bad_indices.append(idx)
+                    continue
+                out = str(r.get("model_response", "") or "")
+                inp = str(r.get("original_question", "") or "")
+                # 条件1: 回答过短
+                if len(out) < 300:
+                    bad_indices.append(idx)
+                # 条件2: 回答与输入高度重合（回声）
+                elif len(out) < 500 and inp and (inp[:50] in out[:100] or out.strip() == inp.strip()):
+                    bad_indices.append(idx)
+
+            if not bad_indices:
+                print(f"\n  ✅ 复查轮 {rnd+1}: 所有回答正常")
+                break
+
+            print(f"\n  🔄 复查轮 {rnd+1}: 发现 {len(bad_indices)} 个问题回答，重测中...")
+            retry_count = 0
+            page = context.new_page()
+
+            for idx in bad_indices:
+                r = all_results[idx]
+                q_num = r["question_num"]
+                q_text = r["original_question"]  # 原始问题（无前缀）
+                handler_info = SERVICE_HANDLERS.get(services[0], list(SERVICE_HANDLERS.values())[0])
+
+                # 构建完整提示
+                full_q = f"[{q_num}] {q_text}"
+                lang_prompt = LANG_PROMPTS.get(answer_lang, "")
+                full_q = full_q + "\n\n" + lang_prompt if lang_prompt else full_q
+
+                try:
+                    page.goto(handler_info["new_chat_url"], wait_until="domcontentloaded", timeout=20000)
+                    time.sleep(2)
+                except Exception:
+                    pass
+
+                print(f"    [{idx+1}] {q_num} {q_text[:40]}...", end=" ", flush=True)
+                now = datetime.now()
+                result = send_question(page, handler_info, full_q,
+                                       timeout=handler_info.get("wait_timeout", 120000),
+                                       screenshot_dir=screenshot_dir, q_num=q_num)
+
+                if result["success"] and result["response"]:
+                    r["model_response"] = result["response"]
+                    r["test_date"] = f"{now.year}/{now.month}/{now.day}"
+                    r["test_time"] = now.strftime("%H:%M")
+                    r["screenshot"] = result.get("screenshot")
+                    r["error"] = result.get("error")
+                    r["success"] = True
+                    retry_count += 1
+                    print("✅")
+                else:
+                    print("❌")
+                time.sleep(question_delay)
+
+            context.close()
+            print(f"    重测成功: {retry_count}/{len(bad_indices)}")
+        else:
+            # 标记仍未修复的
+            for r in all_results:
+                out = str(r.get("model_response", "") or "")
+                if len(out) < 300 and r.get("success"):
+                    r["note"] = (r.get("note") or "") + "；复查后仍过短"
 
     return all_results
 
@@ -1018,6 +1089,8 @@ def main():
                         help="要求模型回答的语言（默认: zh）。可选: zh/en/auto")
     parser.add_argument("--doc-lang", default="",
                         help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
+    parser.add_argument("--retry", "-r", type=int, default=0,
+                        help="自动复查轮数：检测短回答/回声回答后自动重测（默认 0 = 不复查）")
     parser.add_argument("--monitoring-batch", default="",
                         help="监测批次标识（如 7.2测试题）")
     parser.add_argument("--limit", "-n", type=int, default=0,
@@ -1110,6 +1183,7 @@ def main():
         doc_lang=args.doc_lang,
         question_limit=args.limit,
         monitoring_batch=args.monitoring_batch,
+        retry_rounds=args.retry,
     )
 
     # 审核（可选）
