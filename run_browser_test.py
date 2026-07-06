@@ -449,22 +449,27 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
 
-            # CSS 展开固定容器 + full_page 截取完整问答
-            page.evaluate("""
-                document.querySelectorAll('*').forEach(el => {
-                    const s = getComputedStyle(el);
-                    if (s.overflow !== 'visible' || s.overflowY !== 'visible') {
-                        el.style.setProperty('overflow', 'visible', 'important');
-                        el.style.setProperty('overflow-y', 'visible', 'important');
+            # 找到问答区域边界，用 clip 精确截取问题+回答
+            rect = page.evaluate("""
+                const all = document.querySelectorAll('p, div[class*="message"], div[class*="prose"], [class*="response"]');
+                let top = Infinity, bottom = 0;
+                all.forEach(el => {
+                    const r = el.getBoundingClientRect();
+                    const t = el.innerText || '';
+                    if (t.length > 20 && r.width > 200) {
+                        if (r.top < top) top = r.top;
+                        if (r.bottom > bottom) bottom = r.bottom;
                     }
-                    if (s.maxHeight && s.maxHeight !== 'none')
-                        el.style.setProperty('max-height', 'none', 'important');
                 });
+                return {top: Math.max(0, top - 20), bottom: Math.min(bottom + 20, document.body.scrollHeight)};
             """)
-            time.sleep(0.3)
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(0.5)
-            page.screenshot(path=screenshot_path, full_page=True)
+            if rect and rect.get('top') is not None:
+                page.screenshot(path=screenshot_path, clip={
+                    'x': 0, 'y': rect['top'],
+                    'width': 1280, 'height': rect['bottom'] - rect['top']
+                })
+            else:
+                page.screenshot(path=screenshot_path)
 
             # 清除红框
             page.evaluate("""
