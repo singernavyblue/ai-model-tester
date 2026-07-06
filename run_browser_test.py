@@ -364,7 +364,7 @@ def extract_response(page, handler):
 
 def send_question(page, handler, question_text, timeout=120000, screenshot_dir=None, q_num=""):
     """在指定页面输入问题、提交、等待回答完成、提取回答。"""
-    # 1. 找到输入框
+    # 1. 找到输入框（重试逻辑）
     input_selectors = [handler["input_selector"]]
     if handler.get("input_fallback"):
         if isinstance(handler["input_fallback"], list):
@@ -372,12 +372,19 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
         else:
             input_selectors.append(handler["input_fallback"])
 
-    input_el = find_element(page, input_selectors, timeout=10000)
-    if not input_el:
-        # 兜底：尝试点击页面再找
-        page.click("body", position={"x": 500, "y": 500})
-        time.sleep(2)
-        input_el = find_element(page, input_selectors, timeout=10000)
+    input_el = None
+    for attempt in range(5):
+        input_el = find_element(page, input_selectors, timeout=5000)
+        if input_el:
+            break
+        # 滚到底、点击页面、等待 UI 稳定
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        time.sleep(1)
+        try:
+            page.click("body", position={"x": 600, "y": 700})
+        except Exception:
+            pass
+        time.sleep(1.5)
     if not input_el:
         return {"success": False, "response": "", "error": "找不到输入框，页面可能已改版"}
 
@@ -592,12 +599,11 @@ def run_browser_test(services: list[str], questions: list[dict],
                 # 题间延迟
                 time.sleep(question_delay)
 
-                # 每道题后刷新页面（开新对话），避免上下文干扰
+                # 同一语言连续提问：快速刷新到新对话页
                 if qi < len(questions) - 1:
                     try:
-                        page.goto(handler["new_chat_url"],
-                                  wait_until="domcontentloaded", timeout=20000)
-                        time.sleep(2)
+                        page.goto(handler["new_chat_url"], wait_until="commit", timeout=10000)
+                        time.sleep(1.5)
                     except Exception:
                         pass
 
