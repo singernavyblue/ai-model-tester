@@ -225,8 +225,6 @@ SERVICE_HANDLERS = {
 # 回答语言配置
 LANG_PROMPTS = {
     "zh": "【重要指令】你必须只使用中文回答下面的问题。不要使用任何其他语言，无论问题是什么语言，你的回答都必须是中文。\n\n",
-    "en": "【IMPORTANT】You must answer the following question in English only. Do not use any other language.\n\n",
-    "auto": "",
 }
 
 # ============================================================================
@@ -1104,7 +1102,7 @@ def main():
     parser.add_argument("--headless", action="store_true",
                         help="无头模式（不显示浏览器窗口，需已登录）")
     parser.add_argument("--answer-lang", "-l", default="zh",
-                        help="要求模型回答的语言（默认: zh）。可选: zh/en/auto")
+                        help="要求模型回答的语言（默认: zh）")
     parser.add_argument("--doc-lang", default="",
                         help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
     parser.add_argument("--retry", "-r", type=int, default=1,
