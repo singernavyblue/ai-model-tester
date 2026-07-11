@@ -454,9 +454,17 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
             filename = f"screenshot_{q_num.replace('.','_')}_{datetime.now().strftime('%H%M%S')}.png"
             screenshot_path = str(Path(screenshot_dir) / filename)
 
-            # 滚到底看到回答，视口截图（包含问题+回答的红框区域）
+            # 滚到底，找到回答元素居中显示，视口截图聚焦回答
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(0.3)
+            # 找到文本最长的元素（回答），滚动到可见区域中央
+            page.evaluate("""
+                const all = document.querySelectorAll('p, div[class*=\"message\"], div[class*=\"prose\"], [class*=\"response\"]');
+                let best = null, bestLen = 0;
+                all.forEach(el => { const t = el.innerText || ''; if(t.length > bestLen && t.length > 50) { bestLen = t.length; best = el; } });
+                if(best) best.scrollIntoView({block: 'center', behavior: 'instant'});
+            """)
+            time.sleep(0.2)
             page.screenshot(path=screenshot_path)
 
             # 清除红框
