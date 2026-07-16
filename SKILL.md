@@ -102,7 +102,7 @@ python ~/.claude/skills/model-tester/merge_results.py \
     --input 测试结果/ --output 7.2汇总.xlsx
 ```
 
-合并后生成统一 Excel（3 个 Sheet），截图也会迁移。
+合并后生成统一 Excel（3 个 Sheet），截图也会迁移。**必须使用 merge_results.py 脚本合并，保持格式一致（字体、边框、列宽、行高、颜色）。**
 
 ---
 
