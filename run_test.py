@@ -152,6 +152,36 @@ PROVIDERS = {
             "jamba-1.5-mini":         "jamba-1.5-mini",
         },
     },
+    "zhipu": {
+        "name": "智谱",
+        "api_type": "openai_compatible",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "env_var": "ZHIPU_API_KEY",
+        "models": {
+            "glm-4":                  "glm-4",
+            "glm-4-flash":            "glm-4-flash",
+        },
+    },
+    "xinghuo": {
+        "name": "讯飞星火",
+        "api_type": "openai_compatible",
+        "base_url": "https://spark-api-open.xf-yun.com/v1/chat/completions",
+        "env_var": "XINGHUO_API_KEY",
+        "models": {
+            "spark-lite":             "spark-lite",
+            "spark-pro":              "spark-pro-128k",
+            "spark-max":              "spark-max-32k",
+        },
+    },
+    "taichu": {
+        "name": "紫东太初",
+        "api_type": "openai_compatible",
+        "base_url": "https://ai.ia.ac.cn/api/v1/chat/completions",
+        "env_var": "TAICHU_API_KEY",
+        "models": {
+            "taichu":                 "taichu",
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
