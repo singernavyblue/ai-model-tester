@@ -533,7 +533,8 @@ def run_browser_test(services: list[str], questions: list[dict],
                      output_path: str, headless: bool = False,
                      user_data_dir: str = None, question_delay: float = 3.0,
                      answer_lang: str = "zh", doc_lang: str = "", question_limit: int = 0,
-                     monitoring_batch: str = "", retry_rounds: int = 0):
+                     monitoring_batch: str = "", retry_rounds: int = 0,
+                     enable_screenshot: bool = True):
     """主测试流程：对每个服务、每个问题执行网页自动化测试。"""
     sync_playwright = ensure_playwright()
 
@@ -622,7 +623,7 @@ def run_browser_test(services: list[str], questions: list[dict],
                 print(f"  [{qi+1}/{len(questions)}] [{q_num}] {q_text[:50]}...",
                       end=" ", flush=True)
 
-                screenshot_dir = str(Path(output_path).parent / "截图") if output_path else None
+                screenshot_dir = str(Path(output_path).parent / "截图") if (output_path and enable_screenshot) else None
                 result = send_question(page, handler, q_text,
                                        timeout=handler.get("wait_timeout", 120000),
                                        screenshot_dir=screenshot_dir, q_num=q_num)
@@ -1163,6 +1164,10 @@ def main():
                         help="测试题文档的语言标识（如 中文/英文/蒙古语/藏语/哈萨克语/维吾尔语）")
     parser.add_argument("--retry", "-r", type=int, default=1,
                         help="自动复查轮数：检测短回答/回声回答后自动重测（默认 1）")
+    parser.add_argument("--screenshot", action="store_true", default=True,
+                        help="异常时截图嵌入 Excel（默认开启）")
+    parser.add_argument("--no-screenshot", action="store_false", dest="screenshot",
+                        help="关闭截图功能")
     parser.add_argument("--monitoring-batch", default="",
                         help="监测批次标识（如 7.2测试题）")
     parser.add_argument("--limit", "-n", type=int, default=0,
@@ -1260,6 +1265,7 @@ def main():
         question_limit=args.limit,
         monitoring_batch=args.monitoring_batch,
         retry_rounds=args.retry,
+        enable_screenshot=args.screenshot,
     )
 
     # 审核（可选）
