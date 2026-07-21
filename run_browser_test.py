@@ -450,17 +450,23 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
     except Exception as e:
         return {"success": False, "response": "", "error": f"输入失败: {e}"}
 
-    # 3. 提交（重试处理元素失联）
+    # 3. 提交（重试处理元素不稳定/失联）
     submit_strategy = handler.get("submit_strategy", "enter")
-    for retry in range(3):
+    for retry in range(5):
         try:
             if submit_strategy == "click":
                 submit_sel = handler.get("submit_selector", "")
                 if submit_sel:
-                    btn = find_element(page, submit_sel, timeout=5000)
-                    if btn:
-                        btn.click()
-                    else:
+                    # 等待按钮稳定后再点击
+                    try:
+                        page.wait_for_selector(submit_sel, timeout=10000, state="visible")
+                        time.sleep(1)  # 等按钮停止动画
+                        btn = page.query_selector(submit_sel)
+                        if btn:
+                            btn.click(force=True)  # 强制点击，忽略稳定性检查
+                        else:
+                            input_el.press("Enter")
+                    except Exception:
                         input_el.press("Enter")
                 else:
                     input_el.press("Enter")
@@ -468,11 +474,11 @@ def send_question(page, handler, question_text, timeout=120000, screenshot_dir=N
                 input_el.press("Enter")
             break
         except Exception:
-            if retry < 2:
-                time.sleep(1)
+            if retry < 4:
+                time.sleep(2)
                 input_el = find_element(page, input_selectors, timeout=5000)
                 if not input_el:
-                    raise
+                    continue
 
     time.sleep(2)
 

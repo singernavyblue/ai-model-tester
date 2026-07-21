@@ -70,7 +70,7 @@ def translate_text(text: str, api_key: str) -> str:
         return text
 
 
-def clean_file(filepath: str, translate_key: str = None):
+def clean_file(filepath: str, translate_key: str = None, check_empty: bool = False):
     """清洗单个 xlsx 文件。"""
     print(f"📖 打开: {filepath}")
     wb = load_workbook(filepath)
@@ -79,6 +79,7 @@ def clean_file(filepath: str, translate_key: str = None):
     out_col = hdrs.get('output_content')
     note_col = hdrs.get('note')
     inp_col = hdrs.get('input_content')
+    lang_col = hdrs.get('language')
 
     if not out_col:
         print("❌ 未找到 output_content 列")
@@ -148,6 +149,28 @@ def clean_file(filepath: str, translate_key: str = None):
         if non_cn > 0:
             print(f"  ⚠️ 检测到 {non_cn} 行非中文，使用 --translate-key 进行翻译")
 
+    # Step 3: 检测空白 output（可选）
+    if check_empty:
+        empty_rows = []
+        err_rows = []
+        for row in ws.iter_rows(min_row=2):
+            out = str(row[out_col - 1].value) if out_col and row[out_col - 1].value else ''
+            err = str(row[note_col - 1].value) if note_col and row[note_col - 1].value else ''
+            lang = str(row[lang_col - 1].value) if lang_col and lang_col > 0 and len(row) >= lang_col else ''
+            inp = str(row[inp_col - 1].value) if inp_col and row[inp_col - 1].value else ''
+            if not out or len(out) < 50:
+                empty_rows.append((row[0].row, lang, inp[:50]))
+            if 'Timeout' in err or '无法访问' in err or 'connection' in err.lower():
+                err_rows.append((row[0].row, lang, err[:60]))
+        if empty_rows:
+            print(f"\n  ⚠️ 空白回答: {len(empty_rows)} 行")
+            for r, l, q in empty_rows[:5]:
+                print(f"    行{r} [{l}] {q}...")
+        if err_rows:
+            print(f"\n  ⚠️ 网络错误: {len(err_rows)} 行")
+            for r, l, e in err_rows[:5]:
+                print(f"    行{r} [{l}] {e}...")
+
     wb.save(filepath)
     print(f"✅ 保存: {filepath}")
 
@@ -157,6 +180,8 @@ def main():
     parser.add_argument("--input", "-i", required=True, help="要清洗的 xlsx 文件路径")
     parser.add_argument("--translate-key", "-k", default=None,
                         help="DeepSeek API key 用于翻译非中文内容")
+    parser.add_argument("--check-empty", action="store_true",
+                        help="检测 output_content 为空的异常行，输出重测列表")
     args = parser.parse_args()
 
     path = Path(args.input)
@@ -164,7 +189,7 @@ def main():
         print(f"❌ 文件不存在: {args.input}")
         sys.exit(1)
 
-    clean_file(str(path), args.translate_key)
+    clean_file(str(path), args.translate_key, args.check_empty)
 
 
 if __name__ == "__main__":
