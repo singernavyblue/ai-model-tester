@@ -90,16 +90,21 @@ python ~/.claude/skills/model-tester/clean_results.py \
 - 删除 `【重要指令】你必须只使用中文回答...` 等语言指令
 - 可选：将非中文回答翻译为中文
 
-### 检测空白回答并重测
+### 检测空白回答并重测（必须执行）
 
-合并清洗后，必须检测是否有空白 output 或网络错误行：
+合并清洗后，**必须**检测并重测空白 output 或网络错误行：
 
 ```bash
-# 检测空白
-python ~/.claude/skills/model-tester/clean_results.py --input 汇总.xlsx --check-empty
+# 检测并自动重测空白行（只测有问题的那几题）
+python ~/.claude/skills/model-tester/retry_blanks.py \
+    --input 汇总.xlsx --services meta --judge-key sk-xxx
+
+# 不开截图（更快）
+python ~/.claude/skills/model-tester/retry_blanks.py \
+    --input 汇总.xlsx --services meta --judge-key sk-xxx --no-screenshot
 ```
 
-如有空白行，重新测试对应语言的文件，然后用最新结果覆盖合并文件。
+此脚本只重测空白/错误行，不会重跑整个语言文件。
 
 ### 合并多个测试结果
 
