@@ -328,15 +328,17 @@ def wait_for_response_completion(page, handler, timeout=120000):
     # 第二重：等 DOM 稳定（文本不再变化）
     try:
         prev_text = ""
-        for _ in range(6):  # 最多检测 6 次，每次间隔 2 秒
-            time.sleep(2)
+        for _ in range(20):  # 最多检测 20 次，每次间隔 3 秒 = 60 秒
+            time.sleep(3)
             try:
                 body = page.query_selector("body")
                 cur_text = body.inner_text() if body else ""
             except Exception:
                 cur_text = ""
+            # 文本稳定且足够长，连续两次相同 = 生成完毕
             if cur_text == prev_text and len(cur_text) > 100:
-                break  # 文本稳定且足够长，认为生成完毕
+                time.sleep(2)  # 再等 2 秒确保渲染完
+                break
             prev_text = cur_text
             if time.time() - start > timeout / 1000:
                 break
@@ -347,12 +349,13 @@ def wait_for_response_completion(page, handler, timeout=120000):
     try:
         page.wait_for_selector(
             'button[aria-label="Copy"], [data-testid="copy"], [aria-label="Like"], '
-            '[aria-label="Good response"], [aria-label="Thumbs up"]',
-            timeout=min(15000, timeout - (time.time() - start) * 1000)
+            '[aria-label="Good response"], [aria-label="Thumbs up"], '
+            'button[aria-label="复制"], [class*="copy"]',
+            timeout=min(20000, timeout - (time.time() - start) * 1000)
         )
-        time.sleep(handler.get("post_wait", 2000) / 1000)
+        time.sleep(3)
     except Exception:
-        time.sleep(handler.get("stable_wait", 8000) / 1000)
+        time.sleep(max(handler.get("stable_wait", 15000) / 1000, 10))
 
     return True
 
