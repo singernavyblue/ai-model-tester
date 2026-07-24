@@ -123,6 +123,21 @@ python ~/.claude/skills/model-tester/merge_results.py \
 
 合并后生成统一 Excel（3 个 Sheet），截图也会迁移。**必须使用 merge_results.py 脚本合并，保持格式一致（字体、边框、列宽、行高、颜色）。**
 
+### 翻译 output_content 为中文（合并后必须执行）
+
+合并完成后，**必须**将 `output_content` 列中所有非中文内容翻译为中文：
+
+```bash
+# 使用 DeepSeek 翻译 output_content 列为中文
+python ~/.claude/skills/model-tester/clean_results.py \
+    --input 汇总.xlsx --translate-key <DeepSeek API key>
+```
+
+- 自动检测非中文内容并翻译
+- 已为中文的内容跳过不翻译
+- 如果用户提供了 DeepSeek API key（用于审核），直接复用该 key
+- 翻译后直接覆盖原文件
+
 ---
 
 ## API 模式
@@ -198,6 +213,22 @@ python ~/.claude/skills/model-tester/run_test.py \
 - 成功/失败统计
 - 按模型汇总的成功率
 - Excel 文件路径
+
+### 第五步：合并结果并翻译 output_content
+
+如果测试了多个语言/文件，需要合并所有结果：
+
+```bash
+python ~/.claude/skills/model-tester/merge_results.py \
+    --input 测试结果/ --pattern "<匹配模式>" --output <汇总文件名>.xlsx
+```
+
+合并后**必须**将 `output_content` 列翻译为中文：
+
+```bash
+python ~/.claude/skills/model-tester/clean_results.py \
+    --input <汇总文件名>.xlsx --translate-key <DeepSeek API key>
+```
 
 ---
 
